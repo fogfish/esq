@@ -21,7 +21,7 @@ It uses B-tree indexes to sort message.
 
 ### Heap queue
 
-   ![Heap queue performance][heap.png]
+   ![Heap queue performance](heap.png)
 
 
  
