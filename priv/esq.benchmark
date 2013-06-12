@@ -1,0 +1,28 @@
+{code_paths, [
+   "./ebin"
+  ,"./deps/feta"
+  ,"./deps/lager"
+]}.
+{log_level,       info}.
+{report_interval, 1}.
+%{report_interval, 10}.
+{driver,          esq_benchmark}.
+
+
+
+%%
+%% workload
+{mode,            max}.
+{duration,          1}.
+{concurrent,       10}.
+ 
+{key_generator,   {uniform_int, 10000000}}.
+{value_generator, {fixed_bin,   1024}}.
+
+{operations, [
+   {enq,     1},
+   {deq,     1} 
+]}.
+
+%{esq_node,  [{host, mysqld}, {pool, 30}]}.
+%{esq_queue, [priority]}.

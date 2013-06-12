@@ -1,0 +1,19 @@
+DEPS = fun(File, Config) ->
+   case file:consult(File) of
+      {ok, DEPS} ->
+         {deps, List} = lists:keyfind(deps, 1, Config),
+         lists:keystore(deps, 1, Config, {deps, List ++ DEPS});
+      _ ->
+         Config
+   end 
+end,
+Fdeps = fun(Config) -> DEPS("deps.config", Config) end, 
+
+lists:foldl(
+   fun(X, Acc) -> X(Acc) end,
+   CONFIG,
+   [Fdeps]
+).
+
+   
+
