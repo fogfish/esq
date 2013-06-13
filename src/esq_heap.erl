@@ -36,7 +36,10 @@
 %% start heap instance
 start_link(Name, Opts)
  when is_atom(Name) ->
-   gen_server:start_link({local, Name}, ?MODULE, [Name, Opts], []).
+   gen_server:start_link({local, Name}, ?MODULE, [Name, Opts], []);
+
+start_link(Name, Opts) ->
+   gen_server:start_link(?MODULE, [Name, Opts], []).
 
 init([Name, Opts])
  when is_atom(Name) ->
