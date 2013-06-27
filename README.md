@@ -1,7 +1,6 @@
-# Erlang Simple Queue
+# Embeddable Simple Queue for Erlang
 
-The library provides very simple (tiny) priority queue. 
-It uses B-tree indexes to sort message.
+The library provides very simple (tiny) priority queue built over B-tree indexes.
 
 
 ## Usage

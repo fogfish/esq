@@ -16,8 +16,8 @@
 %%
 
 %% default priorities
--define(DEF_PRI_LOW,  16#ffffffff).
--define(DEF_PRI_HIGH,        16#0).
+-define(ESQ_PRI_LOW,  16#ffffffff).
+-define(ESQ_PRI_HIGH,        16#0).
 
 %% default timeout
 -define(ESQ_TIMEOUT,       60000).

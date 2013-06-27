@@ -19,8 +19,11 @@
 
 -export([
    start/0,
+
    start_link/1, start_link/2,
-   enq/2, enq/3, enq_/2, enq_/3,
+   ioctl/2, ioctl/3,
+
+   enq/2, enq/3,
    deq/1, deq/2, deq/3
 ]).
 
@@ -51,23 +54,14 @@ start_link(Name, Opts) ->
 %%
 %% enqueue message
 -spec(enq/2  :: (pid(), msg()) -> ok | {error, any()}).
--spec(enq_/2 :: (pid(), msg()) -> ok | {error, any()}).
 -spec(enq/3  :: (pid(), pri(), msg()) -> ok | {error, any()}).
--spec(enq_/3 :: (pid(), pri(), msg()) -> ok | {error, any()}).
 
 enq(Pid, Msg) ->
-   enq(Pid, ?DEF_PRI_LOW, Msg).
+   enq(Pid, ?ESQ_PRI_LOW, Msg).
 
 enq(Pid, Pri, Msg)
  when is_integer(Pri) ->  
    gen_server:call(Pid, {enq, Pri, Msg}, ?ESQ_TIMEOUT).
-
-enq_(Pid, Msg) ->
-   enq_(Pid, ?DEF_PRI_LOW, Msg).
-
-enq_(Pid, Pri, Msg)
- when is_integer(Pri) -> 
-   gen_server:call(Pid, {'enq_', Pri, Msg}, ?ESQ_TIMEOUT).
 
 %%
 %% dequeue message
@@ -79,14 +73,27 @@ deq(Pid) ->
 
 deq(Pid, N)
  when is_integer(N) ->
-   deq(Pid, ?DEF_PRI_HIGH, N).
+   deq(Pid, ?ESQ_PRI_HIGH, N).
 
 deq(Pid, Pri, N)
  when is_integer(Pri), is_integer(N) ->
    gen_server:call(Pid, {deq, Pri, N}, ?ESQ_TIMEOUT).
 
 
+%%
+%% queue i/o control:
+%%    capacity  - set high water mark for queue outstanding messages
+%%    length    - number of messages in queue (read-only)
+%%    inbound   - 
+%%    outbound  -
+-spec(ioctl/2 :: (any(), pid()) -> {ok, any()} | {error, any()}).
+-spec(ioctl/3 :: (atom(), any(), pid()) -> ok | {error, any()}).
 
+ioctl(Req, Pid) ->
+   gen_server:call(Pid, {ioctl, Req}).
+
+ioctl(Key, Val, Pid) ->
+   ioctl({Key, Val}, Pid).
 
 
 
