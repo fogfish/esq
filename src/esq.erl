@@ -47,9 +47,12 @@ start_link(Name) ->
    start_link(Name, []).
 
 start_link(Name, Opts) ->
-   case opts:get([heap], heap, Opts) of
-      heap -> esq_heap:start_link(Name, Opts)
-   end.
+   start_link(opts:get([heap, spool], heap, Opts), Name, Opts).
+
+start_link(heap,  Name, Opts) ->
+   esq_heap:start_link(Name, Opts);
+start_link({spool, _}, Name, Opts) ->
+   esq_spool:start_link(Name, Opts).
 
 %%
 %% enqueue message
