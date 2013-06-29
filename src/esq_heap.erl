@@ -102,7 +102,7 @@ handle_call({deq, Pri, N}, _Tx, S) ->
 %% ioctl
 handle_call({ioctl, Req}, _Tx, S)
  when is_atom(Req) ->
-   {reply, {ok, get_ioctl(Req, S)}, S};
+   {reply, get_ioctl(Req, S), S};
 
 handle_call({ioctl, {_, _}=Req}, _Tx, S) ->
    try

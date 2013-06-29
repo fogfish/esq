@@ -86,7 +86,7 @@ deq(Pid, Pri, N)
 %%    length    - number of messages in queue (read-only)
 %%    inbound   - 
 %%    outbound  -
--spec(ioctl/2 :: (any(), pid()) -> {ok, any()} | {error, any()}).
+-spec(ioctl/2 :: (any(), pid()) -> any() | undefined).
 -spec(ioctl/3 :: (atom(), any(), pid()) -> ok | {error, any()}).
 
 ioctl(Req, Pid) ->
