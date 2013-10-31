@@ -18,7 +18,6 @@ distclean: clean
 	./rebar delete-deps
 
 test: all
-	mysql -u${USER} -p${PASS} -h${HOST} -e 'source ./test/aika_tests.sql'
 	./rebar skip_deps=true eunit
 
 docs:
