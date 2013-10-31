@@ -26,7 +26,8 @@
    init/1,
    free/2,
    enq/3,
-   deq/3
+   deq/3,
+   ttl/1
 ]).
 
 %% internal state
@@ -37,7 +38,8 @@
 
    written = 0         :: integer(),  %% number of written bytes to segment
    segment = undefined :: integer(),
-   content = undefined :: atom()
+   content = undefined :: atom(),
+   ttl     = undefined :: any()
 }).
 
 -define(DEFAULT_CONTENT, binary).
@@ -58,7 +60,7 @@ init(Opts) ->
       #spool{
          fs      = Fs,
          segment = opts:val(segment, ?DEFAULT_SEGMENT, Opts),
-         content = opts:val(content, ?DEFAULT_CONTENT, Opts)
+         content = opts:val(content, ?DEFAULT_CONTENT, Opts) 
       }
    }.
 
@@ -154,6 +156,17 @@ deq_from_file(File, N, Acc) ->
       Error ->
          Error
    end.
+
+%%
+%%
+ttl(S) ->
+   _ = esq_file:rotate(S#spool.oq),
+   {ok,
+      S#spool{
+         oq = undefined
+      } 
+   }.
+
 
 %%%----------------------------------------------------------------------------   
 %%%

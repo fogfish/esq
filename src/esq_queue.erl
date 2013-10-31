@@ -35,6 +35,7 @@
    capacity = inf  :: inf | integer(),
    inbound  = inf  :: inf | integer(),
    outbound = inf  :: inf | integer(),
+   ttl      = undefined :: any(),
 
    length   = 0         :: integer(),
    mod      = undefined :: atom(),
@@ -159,6 +160,15 @@ handle_cast(_Req, S) ->
 
 %%
 %%  
+handle_info(ttl, #queue{mod=Mod}=S) ->
+   {ok, Q} = Mod:ttl(S#queue.q),
+   {noreply,
+      S#queue{
+         ttl = tempus:reset(S#queue.ttl, ttl), 
+         q   = Q
+      }
+   };
+
 handle_info(_Msg, S) ->
    {noreply, S}.
 
@@ -189,6 +199,11 @@ set_ioctl([{inbound,  X} | Opts], S) ->
    set_ioctl(Opts, S#queue{inbound=X});
 set_ioctl([{outbound, X} | Opts], S) ->
    set_ioctl(Opts, S#queue{outbound=X});
+set_ioctl([{ttl,      X} | Opts], #queue{ttl=undefined}=S) ->
+   set_ioctl(Opts, S#queue{ttl=tempus:event(X * 1000, ttl)});
+set_ioctl([{ttl,      X} | Opts], S) ->
+   _ = tempus:cancel(S#queue.ttl),
+   set_ioctl(Opts, S#queue{ttl=tempus:event(X * 1000, ttl)});
 set_ioctl([_ | Opts], S) ->
    set_ioctl(Opts, S);
 set_ioctl([], S) ->

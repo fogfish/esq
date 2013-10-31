@@ -22,7 +22,8 @@
    init/1,
    free/2,
    enq/3,
-   deq/3
+   deq/3,
+   ttl/1
 ]).
 
 %% internal state
@@ -75,6 +76,11 @@ deq(Pri, N, S) ->
          lists:foreach(fun({Key, _}) -> ets:delete(S#queue.heap, Key) end, Msg),
          {ok, [X || {_, X} <- Msg], S}
    end.
+
+%%
+%%
+ttl(S) ->
+   {ok, S}.
 
 %%%----------------------------------------------------------------------------   
 %%%
