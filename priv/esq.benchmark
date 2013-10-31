@@ -1,6 +1,7 @@
 {code_paths, [
    "./ebin"
   ,"./deps/feta"
+  ,"./deps/datum"
   ,"./deps/lager"
 ]}.
 {log_level,       info}.
@@ -24,5 +25,8 @@
    {deq,     1} 
 ]}.
 
-%{esq_node,  [{host, mysqld}, {pool, 30}]}.
-%{esq_queue, [priority]}.
+{esq_priority,   10}.
+%{esq_batch,     100}.
+%{esq_queue,      []}.
+%{esq_queue,      [{spool, "/tmp/spool.esq"}, {bulk, 100}]}.
+%{esq_queue,      [{fspool, "/tmp/spool"}, {segment, 1000000}]}.

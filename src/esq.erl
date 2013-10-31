@@ -17,14 +17,19 @@
 -module(esq).
 -include("esq.hrl").
 
+-export([start/0]).
 -export([
-   start/0,
-
-   start_link/1, start_link/2,
-   ioctl/2, ioctl/3,
-
-   enq/2, enq/3,
-   deq/1, deq/2, deq/3
+   start_link/1, 
+   start_link/2,
+   ioctl/2, 
+   ioctl/3,
+   enq/2, 
+   enq/3,
+   enq_/2,
+   enq_/3,
+   deq/1, 
+   deq/2, 
+   deq/3
 ]).
 
 -type(msg() :: any()).
@@ -40,22 +45,30 @@ start() ->
 
 %%
 %% create new queue
+%% Options
+%%    {sync, integer()}
 -spec(start_link/1 :: (any()) -> {ok, pid()} | {error, any()}).
 -spec(start_link/2 :: (any(), list()) -> {ok, pid()} | {error, any()}).
 
-start_link(Name) ->
-   start_link(Name, []).
+start_link(Name)
+ when is_atom(Name) ->
+   start_link(Name, []);
+start_link(Opts)
+ when is_list(Opts) ->
+   start_link(undefined, Opts).
 
 start_link(Name, Opts) ->
-   start_link(opts:get([heap, spool], heap, Opts), Name, Opts).
-
-start_link(heap,  Name, Opts) ->
-   esq_heap:start_link(Name, Opts);
-start_link({spool, _}, Name, Opts) ->
-   esq_spool:start_link(Name, Opts).
+   case opts:get([heap, spool, fspool], heap, Opts) of
+      heap ->
+         esq_queue:start_link(Name, esq_heap, Opts);
+      {spool,  _} ->
+         esq_queue:start_link(Name, esq_spool_dets, Opts);
+      {fspool, _} ->
+         esq_queue:start_link(Name, esq_spool_fs, Opts)   
+   end.
 
 %%
-%% enqueue message
+%% synchronous message enqueue
 -spec(enq/2  :: (pid(), msg()) -> ok | {error, any()}).
 -spec(enq/3  :: (pid(), pri(), msg()) -> ok | {error, any()}).
 
@@ -65,6 +78,20 @@ enq(Pid, Msg) ->
 enq(Pid, Pri, Msg)
  when is_integer(Pri) ->  
    gen_server:call(Pid, {enq, Pri, Msg}, ?ESQ_TIMEOUT).
+
+
+%%
+%% asynchronous message enqueue
+-spec(enq_/2  :: (pid(), msg()) -> ok | {error, any()}).
+-spec(enq_/3  :: (pid(), pri(), msg()) -> ok | {error, any()}).
+
+enq_(Pid, Msg) ->
+   enq_(Pid, ?ESQ_PRI_LOW, Msg).
+
+enq_(Pid, Pri, Msg)
+ when is_integer(Pri) ->  
+   gen_server:cast(Pid, {enq, Pri, Msg}).
+
 
 %%
 %% dequeue message

@@ -22,27 +22,45 @@
    new/1, run/4
 ]).
 
+%% internal state
+-record(fsm, {
+   pri   = undefined :: integer(),  % priority range
+   batch = undefined :: integer()   % size of batch operation
+}).
+
+%%
 new(_Id) ->
    try
       lager:set_loglevel(lager_console_backend, basho_bench_config:get(log_level, info)),
-      {ok, init()}
+      _ = init(),
+      {ok,
+         #fsm{
+            pri   = basho_bench_config:get(esq_priority, 16#ffffffff),
+            batch = basho_bench_config:get(esq_batch,    1)
+         } 
+      }
    catch Error:Reason ->
       lager:error("~p:~p ~p", [Error, Reason, erlang:get_stacktrace()]),
       halt(1)
    end.
 
-%%
 %% 
 run(enq, _KeyGen, ValGen, S) ->
-   %Val = ValGen(),
-   %<<Pri:4/integer, _/binary>> = Val,
-   case esq:enq(queue, random:uniform(16#ffffffff), ValGen()) of
+   N   = random:uniform(S#fsm.batch),
+   Pri = random:uniform(S#fsm.pri),
+   Result = lists:foldl(
+      fun(_, {error, _}=Acc) -> Acc; (_, _) -> esq:enq(queue, Pri, ValGen()) end,
+      ok,
+      lists:seq(1, N)
+   ),
+   case Result of
       ok              -> {ok, S};
       {error, Reason} -> {error, Reason, S}
    end;
 
 run(deq, _KeyGen, _ValGen, S) ->
-   case esq:deq(queue, random:uniform(10)) of
+   N = random:uniform(S#fsm.batch),
+   case esq:deq(queue, N) of
       {error, Reason} -> {error, Reason, S};
       []              -> {error, not_found, S};
       _               -> {ok, S}
@@ -55,29 +73,13 @@ run(deq, _KeyGen, _ValGen, S) ->
 %%%
 %%%----------------------------------------------------------------------------   
 
-%%
-%%
+%% init application
 init() ->
    case applib:boot(esq, []) of
       {error, {already_started, _}} -> 
          ok;
       _ ->
-         {ok, _} = esq:start_link(queue)
-         % Host    = basho_bench_config:get(esq_node,  [{host, localhost}, {pool, 30}]),
-         % Queue   = basho_bench_config:get(esq_queue, []),
-         % {ok, _} = mets:start_link(esq,   Host),
-         
-         % {ok, _} = esq:start_link(oqueue, Queue)
+         {ok, _} = esq:start_link(queue, basho_bench_config:get(esq_queue, []))
    end.
-
-% is_consumer(Id) ->
-%    case basho_bench_config:get(esq_consumer, 0) of
-%       N when N >= Id -> consumer;
-%       _              -> publisher
-%    end.
-
-% is_priority() ->
-%    Queue   = basho_bench_config:get(esq_queue, []),
-%    opts:get([priority], simple, Queue).
 
 

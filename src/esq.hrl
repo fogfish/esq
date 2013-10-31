@@ -22,3 +22,6 @@
 %% default timeout
 -define(ESQ_TIMEOUT,       60000).
 
+%% default vardir for persistent queues
+-define(VARDIR,  "/var/spool/esq").
+
