@@ -72,19 +72,8 @@ handle_call({enq, _, _}, _Tx, #queue{capacity=C, length=L}=S)
  when L =/= inf, L >= C ->
    {reply, {error, busy}, S}; 
 
-handle_call({enq, Pri, Msg}, _Tx, #queue{mod=Mod}=S) ->
-   case Mod:enq(Pri, Msg, S#queue.q) of
-      {ok, Q} ->
-         {reply, ok, 
-            S#queue{
-               length   = add(S#queue.length,   1),
-               inbound  = sub(S#queue.inbound,  1),
-               q        = Q
-            }
-         };
-      Error   ->
-         {reply, Error, S}
-   end;   
+handle_call({enq, Pri, Msg}, _Tx, S) ->
+   enqueue(Pri, Msg, S);
 
 %%
 %% dequeue message
@@ -220,6 +209,31 @@ get_ioctl(outbound, S) ->
 get_ioctl(_, _) ->
    undefined.
 
+%%
+%% enqueue message(s)
+enqueue(Pri, [Msg | Tail], S0) ->
+   case enqueue(Pri, Msg, S0) of
+      {reply, ok, S} -> 
+         enqueue(Pri, Tail, S);
+      Error ->
+         Error
+   end;
 
+enqueue(Pri, [],  S) ->
+   {reply, ok, S};
+
+enqueue(Pri, Msg, #queue{mod=Mod}=S) ->
+   case Mod:enq(Pri, Msg, S#queue.q) of
+      {ok, Q} ->
+         {reply, ok, 
+            S#queue{
+               length   = add(S#queue.length,   1),
+               inbound  = sub(S#queue.inbound,  1),
+               q        = Q
+            }
+         };
+      Error   ->
+         {reply, Error, S}
+   end.
 
 
