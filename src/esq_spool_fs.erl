@@ -134,12 +134,11 @@ deq(Pri, N, #spool{iq=undefined}=S) ->
       {ok,      File} -> deq(Pri, N, S#spool{iq=File});
       Error           -> Error
    end;
-
-deq(_Pri, N, S) ->
+deq(Pri, N, S) ->
    case deq_from_file(S#spool.iq, N, []) of
       {ok,  []} ->
          esq_file:remove(S#spool.iq),
-         {ok, [], S#spool{iq=undefined}};
+         deq(Pri, N, S#spool{iq=undefined});
       {ok, Msg} ->
          {ok, Msg, S};
       Error     ->
