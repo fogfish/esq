@@ -29,4 +29,4 @@
 %{esq_batch,     100}.
 %{esq_queue,      []}.
 %{esq_queue,      [{spool, "/tmp/spool.esq"}, {bulk, 100}]}.
-%{esq_queue,      [{fspool, "/tmp/spool"}, {segment, 1000000}]}.
+{esq_queue,      [{fspool, "/tmp/spool"}, {segment, 1000000}]}.
