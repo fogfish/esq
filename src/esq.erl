@@ -45,8 +45,6 @@ start() ->
 
 %%
 %% create new queue
-%% Options
-%%    {sync, integer()}
 -spec(start_link/1 :: (any()) -> {ok, pid()} | {error, any()}).
 -spec(start_link/2 :: (any(), list()) -> {ok, pid()} | {error, any()}).
 
@@ -58,13 +56,15 @@ start_link(Opts)
    start_link(undefined, Opts).
 
 start_link(Name, Opts) ->
-   case opts:get([heap, spool, fspool], heap, Opts) of
+   case opts:get([heap, spool, fspool, tspool], heap, Opts) of
       heap ->
          esq_queue:start_link(Name, esq_heap, Opts);
       {spool,  _} ->
          esq_queue:start_link(Name, esq_spool_dets, Opts);
       {fspool, _} ->
-         esq_queue:start_link(Name, esq_spool_fs, Opts)   
+         esq_queue:start_link(Name, esq_spool_fs, Opts);
+      {tspool, _} ->
+         esq_queue:start_link(Name, esq_spool_text, Opts)   
    end.
 
 %%

@@ -15,12 +15,12 @@
 %%   limitations under the License.
 %%
 %% @description
-%%    file system spool
+%%    file system spool - (text spool)
 %%
 %% @todo
 %%   * deq N messages
 %%   * implement deq priority
--module(esq_spool_fs).
+-module(esq_spool_text).
 
 -export([
    init/1,
@@ -46,12 +46,8 @@
 -define(WRITER_EXT,      ".spool").
 -define(READER_EXT,      ".[0-9]*").
 
--define(TYPE_BIN,         0).
--define(TYPE_ERL,         1).
-
-
 init(Opts) ->
-   Fs  = opts:val(fspool, Opts),
+   Fs  = opts:val(tspool, Opts),
    _   = shift_file(Fs),
    {ok, inf, 
       #spool{
@@ -75,9 +71,12 @@ free(_, #spool{}=S) ->
 %% enqueue message
 enq(_Pri, Msg, S) 
  when is_binary(Msg) ->
-   enq_to_file(<<?TYPE_BIN:8, Msg/binary>>, S);
+   case binary:last(Msg) of
+      $\n -> enq_to_file(Msg, S);
+      _   -> enq_to_file(<<Msg/binary, $\n>>, S)
+   end;
 enq(_Pri, Msg, S) ->
-   enq_to_file(<<?TYPE_ERL:8, (erlang:term_to_binary(Msg))/binary>>, S).
+   {error, badarg}.
 
 %%
 %%
@@ -89,9 +88,9 @@ enq_to_file(Msg, #spool{oq=undefined}=S) ->
          Error
    end;
 enq_to_file(Msg, #spool{}=S) ->
-   case esq_file:write(S#spool.oq, Msg) of
-      {ok, Size} ->
-         {ok, shift_queue(S#spool{written = S#spool.written + Size})};
+   case file:write(S#spool.oq, Msg) of
+      ok ->
+         {ok, shift_queue(S#spool{written = S#spool.written + byte_size(Msg)})};
       Error ->
          Error
    end.
@@ -111,7 +110,9 @@ deq(Pri, N, #spool{iq=undefined}=S) ->
 deq(Pri, N, S) ->
    case deq_from_file(S#spool.iq, N, []) of
       {ok,  []} ->
-         esq_file:delete(S#spool.iq),
+         file:delete(
+            hd(filelib:wildcard(S#spool.fs ++ ?READER_EXT))
+         ),
          deq(Pri, N, S#spool{iq=undefined});
       {ok, Msg} ->
          {ok, Msg, S};
@@ -122,11 +123,9 @@ deq(Pri, N, S) ->
 deq_from_file(_File, 0, Acc) ->
    {ok, lists:reverse(Acc)};
 deq_from_file(File, N, Acc) ->
-   case esq_file:read(File) of
-      {ok, <<?TYPE_BIN:8, Msg/binary>>} ->
+   case file:read_line(File) of
+      {ok, Msg} ->
          deq_from_file(File, N - 1, [Msg | Acc]);
-      {ok, <<?TYPE_ERL:8, Msg/binary>>} ->
-         deq_from_file(File, N - 1, [erlang:binary_to_term(Msg) | Acc]);
       eof   ->
          deq_from_file(File, 0, Acc);    
       Error ->
@@ -138,7 +137,7 @@ deq_from_file(File, N, Acc) ->
 ttl(#spool{oq=undefined}=S) ->
    {ok, S};
 ttl(S) ->
-   _ = esq_file:close(S#spool.oq),
+   _ = file:close(S#spool.oq),
    _ = shift_file(S#spool.fs),
    {ok, S#spool{
       oq      = undefined,
@@ -157,7 +156,7 @@ ttl(S) ->
 open_writer(File) ->
    case filelib:ensure_dir(File) of
       ok ->
-         esq_file:start_link(File ++ ?WRITER_EXT, [append, exclusive]);
+         file:open(File ++ ?WRITER_EXT, [binary, append, exclusive]);
       Error ->
          Error
    end.
@@ -169,7 +168,7 @@ open_reader(File) ->
       [] ->
          {error, enoent};
       [Head | _] ->
-         esq_file:start_link(Head, [])
+         file:open(Head, [binary])
    end.
 
 %%
@@ -177,7 +176,7 @@ open_reader(File) ->
 close_file(undefined) ->
    ok;
 close_file(File) ->
-   esq_file:close(File).
+   file:close(File).
 
 
 %%
@@ -193,7 +192,7 @@ shift_file(File) ->
 %%
 shift_queue(#spool{written=Out, segment=Len}=S)
  when Out > Len ->
-   _ = esq_file:close(S#spool.oq),
+   _ = file:close(S#spool.oq),
    _ = shift_file(S#spool.fs),
    S#spool{
       oq      = undefined,

@@ -15,7 +15,7 @@
 %%   limitations under the License.
 %%
 %% @description
-%%    queue file  
+%%    binary file 
 -module(esq_file).
 -behaviour(gen_server).
 
@@ -27,13 +27,12 @@
   ,handle_cast/2 
   ,handle_info/2  
   ,code_change/3
-   %% api
-  ,encode/1
-  ,decode/1
+   %% file api
+  ,close/1
+  ,sync/1
   ,write/2
   ,read/1
-  ,remove/1
-  ,close/1
+  ,delete/1
 ]).
 
 %%
@@ -49,7 +48,9 @@
 }).
 
 %%
-%% open file
+%% open file and start file process
+-spec(start_link/2 :: (list(), list()) -> {ok, pid()} | {error, any()}).
+
 start_link(File, Opts) ->
    case gen_server:start_link(?MODULE, [self(), Ref = make_ref(), File, Opts], []) of
       {ok, Fd} ->
@@ -86,28 +87,46 @@ terminate(_Reason, #io{}=S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%% close file and terminate i/o process
+-spec(close/1 :: (pid()) -> ok).
+
+close(FD)
+ when is_pid(FD) ->
+   gen_server:call(FD, close). 
+
 %%
+%% sync file
+-spec(sync/1 :: (pid()) -> ok).
+
+sync(FD)
+ when is_pid(FD) ->
+   gen_server:call(FD, sync). 
+
+%%
+%% delete file and terminate i/o process
+-spec(delete/1 :: (pid()) -> ok).
+
+delete(FD)
+ when is_pid(FD) ->
+   gen_server:call(FD, delete). 
+
+
+%%
+%% write data to file
+-spec(write/2 :: (pid(), binary()) -> {ok, integer()} | {error, any()}).
+
 write(FD, Data)
  when is_pid(FD) ->
    gen_server:call(FD, {write, Data}).
 
 %%
-%%
+%% read data from file
+-spec(read/1 :: (pid()) -> {ok, binary()}).
+
 read(FD)
  when is_pid(FD) ->
    gen_server:call(FD, read). 
 
-%%
-%%
-remove(FD)
- when is_pid(FD) ->
-   gen_server:call(FD, remove). 
-
-%%
-%%
-close(FD)
- when is_pid(FD) ->
-   gen_server:call(FD, close). 
 
 
 %%%----------------------------------------------------------------------------   
@@ -118,6 +137,14 @@ close(FD)
 
 %%
 %%
+handle_call(close, _Tx, S) ->
+   {stop, normal, ok, S}; 
+
+handle_call(delete, _Tx, #io{}=S) ->
+   _ = file:close(S#io.fd),
+   _ = file:delete(S#io.file),
+   {stop, normal, ok, S#io{fd=undefined}};
+
 handle_call({write, Bin}, _Tx, S) ->
    Chunk = encode(Bin),
    case file:write(S#io.fd, Chunk) of
@@ -149,14 +176,6 @@ handle_call(read, Tx, #io{}=S) ->
       {Msg,  Cache} ->
          {reply, {ok, Msg}, S#io{cache=Cache}}
    end;   
-
-handle_call(remove, _Tx, #io{}=S) ->
-   _ = file:close(S#io.fd),
-   _ = file:delete(S#io.file),
-   {stop, normal, ok, S#io{fd=undefined}};
-
-handle_call(close, _Tx, S) ->
-   {stop, normal, ok, S}; 
 
 handle_call(_Req, _Tx, S) ->
    {noreply, S}.
@@ -230,89 +249,3 @@ decode(<<>>=Tail, Len, Hash, Acc) ->
       Hash -> {Msg,  Tail};
       _    -> {<<>>, Tail}
    end.
-
-
-
-
-
-
-
-
-% -export([
-% 	writer/2,
-% 	reader/2,
-% 	close/1,
-% 	rotate/1,
-% 	remove/1,
-% 	write_record/3,
-% 	write_string/2,
-% 	read_record/1
-% ]).
-
-
-
-% %%
-% %% close file
-% close(undefined) ->
-% 	ok;
-% close({file, _, FD}) ->
-% 	file:close(FD).
-
-
-% %%
-% %% rotate file
-% rotate(undefined) ->
-% 	ok;
-% rotate({file, File, FD}) ->
-% 	file:close(FD),
-% 	rotate(File);
-% rotate(File) ->
-%    {A, B, C} = erlang:now(),
-%    Now = lists:flatten(
-%       io_lib:format(".~6..0b~6..0b~6..0b", [A, B, C])
-%    ),
-%    file:rename(File, filename:rootname(File) ++ Now).
-
-% %%
-% %% remove file
-% remove(undefined) ->
-% 	ok;
-% remove({file, File, FD}) ->
-% 	file:close(FD),
-% 	remove(File);
-% remove(File) ->
-% 	file:delete(File).
-
-% %%
-% %% 
-% write_record({file, _, FD}, Type, Msg) ->
-%    Size = size(Msg),
-%    case file:write(FD, [<<Type:8>>, <<Size:56>>, Msg]) of
-%       ok    -> {ok, Size};
-%       Error -> Error
-%    end.
-
-% write_string({file, _, FD}, Msg) ->
-%    Size = size(Msg),
-%    case file:write(FD, [Msg, $\n]) of
-%       ok    -> {ok, Size};
-%       Error -> Error
-%    end.
-
-% %%
-% %%
-% read_record({file, _, FD}) ->
-% 	case file:read(FD, 8) of
-%       {ok, <<Type:8, Size:56>>} ->
-%          case file:read(FD, Size) of
-%             {ok, Msg} ->
-%                {ok, Type, Msg};
-%             Error     ->
-%                Error
-%          end;
-%       Error ->
-%       	Error
-%    end.
-
-
-
