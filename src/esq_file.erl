@@ -38,7 +38,7 @@
 %%
 %%
 -define(PAGE,             64 * 1024).
--define(CHUNK,                  255).
+-define(HEAD,                     8).
 -define(HASH32(X),  erlang:crc32(X)).
  
 -record(io, {
@@ -212,40 +212,24 @@ code_change(_Vsn, S, _Extra) ->
 %%    http://erlang.org/pipermail/erlang-questions/2013-April/073292.html
 %%    https://gist.github.com/nox/5359459/raw/0b86154804b43b9043a3fed00debe284f4702f10/prealloc_bin.S
 encode(Msg) ->
-   Hash = ?HASH32(Msg),
-   Head = <<(byte_size(Msg)):32, Hash:32, Msg/binary>>, 
-   Tail = <<0:(8 * (?CHUNK - byte_size(Head) rem ?CHUNK))>>,
-   Chunks = [ X || <<X:?CHUNK/binary>> <= <<Head/binary, Tail/binary>> ],
-   << <<X/binary>> || X <- lists:zipwith(fun encode_chunk/2, lists:seq(1, length(Chunks)), Chunks) >>. 
+   %% @todo double zero escape
+   Hash   = ?HASH32(Msg),
+   <<0:16, (byte_size(Msg)):16, Hash:32, Msg/binary>>.
 
-encode_chunk(1, Chunk) ->
-   <<1:8, Chunk/binary>>;
-encode_chunk(_, Chunk) ->
-   <<0:8, Chunk/binary>>.
-
-%%
-%% decode file cells to binary 
-decode(<<1:8, Len:32, Hash:32, Chunk:(?CHUNK - 8)/binary, Tail/binary>>) ->
-   case byte_size(Tail) + ?CHUNK - 8 of
-      %% unable to decode (more data is needed)
+decode(<<0:16, Len:16, Hash:32, Tail/binary>>) ->
+   case byte_size(Tail) of
       X when X < Len ->
          {error, no_message};
-      %%
       _ ->
-         decode(Tail, Len, Hash, [Chunk])
-   end.
-
-decode(<<0:8, Chunk:?CHUNK/binary, Tail/binary>>, Len, Hash, Acc) ->
-   decode(Tail, Len, Hash, [Chunk | Acc]);
-decode(<<1:8, _/binary>>=Tail, Len, Hash, Acc) ->
-   <<Msg:Len/binary, _/binary>> = << <<X/binary>> || X <- lists:reverse(Acc) >>,
-   case ?HASH32(Msg) of
-      Hash -> {Msg,  Tail};
-      _    -> {<<>>, Tail}
+         <<Msg:Len/binary, Rest/binary>> = Tail,
+         case ?HASH32(Msg) of
+            Hash -> {Msg,  Rest};
+            _    -> {<<>>, Rest}
+         end
    end;
-decode(<<>>=Tail, Len, Hash, Acc) ->
-   <<Msg:Len/binary, _/binary>> = << <<X/binary>> || X <- lists:reverse(Acc) >>,
-   case ?HASH32(Msg) of
-      Hash -> {Msg,  Tail};
-      _    -> {<<>>, Tail}
-   end.
+decode(X)
+ when byte_size(X) < ?HEAD ->
+   {error, no_message};
+decode(<<_:8, Tail/binary>>) ->
+   decode(Tail).
+

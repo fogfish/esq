@@ -81,6 +81,9 @@ enq(_Pri, Msg, S) ->
 
 %%
 %%
+enq_to_file(Msg, _)
+ when byte_size(Msg) > 16#ffff ->
+   {error, overflow}; 
 enq_to_file(Msg, #spool{oq=undefined}=S) ->
    case open_writer(S#spool.fs) of
       {ok, FD} -> 

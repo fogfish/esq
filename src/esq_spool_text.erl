@@ -110,9 +110,8 @@ deq(Pri, N, #spool{iq=undefined}=S) ->
 deq(Pri, N, S) ->
    case deq_from_file(S#spool.iq, N, []) of
       {ok,  []} ->
-         file:delete(
-            hd(filelib:wildcard(S#spool.fs ++ ?READER_EXT))
-         ),
+         {ok, File} = file:pid2name(S#spool.iq),
+         file:delete(File),
          deq(Pri, N, S#spool{iq=undefined});
       {ok, Msg} ->
          {ok, Msg, S};
