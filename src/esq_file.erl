@@ -16,6 +16,8 @@
 %%
 %% @description
 %%    binary file 
+%% @todo
+%%    handle i/o timeout error
 -module(esq_file).
 -behaviour(gen_server).
 
@@ -92,7 +94,7 @@ terminate(_Reason, #io{}=S) ->
 
 close(FD)
  when is_pid(FD) ->
-   gen_server:call(FD, close). 
+   gen_server:call(FD, close, infinity). 
 
 %%
 %% sync file
@@ -100,7 +102,7 @@ close(FD)
 
 sync(FD)
  when is_pid(FD) ->
-   gen_server:call(FD, sync). 
+   gen_server:call(FD, sync, infinity). 
 
 %%
 %% delete file and terminate i/o process
@@ -108,7 +110,7 @@ sync(FD)
 
 delete(FD)
  when is_pid(FD) ->
-   gen_server:call(FD, delete). 
+   gen_server:call(FD, delete, infinity). 
 
 
 %%
@@ -117,7 +119,7 @@ delete(FD)
 
 write(FD, Data)
  when is_pid(FD) ->
-   gen_server:call(FD, {write, Data}).
+   gen_server:call(FD, {write, Data}, infinity).
 
 %%
 %% read data from file
@@ -125,7 +127,7 @@ write(FD, Data)
 
 read(FD)
  when is_pid(FD) ->
-   gen_server:call(FD, read). 
+   gen_server:call(FD, read, infinity). 
 
 
 

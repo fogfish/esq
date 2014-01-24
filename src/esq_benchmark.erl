@@ -48,12 +48,8 @@ new(_Id) ->
 run(enq, _KeyGen, ValGen, S) ->
    N   = random:uniform(S#fsm.batch),
    Pri = random:uniform(S#fsm.pri),
-   Result = lists:foldl(
-      fun(_, {error, _}=Acc) -> Acc; (_, _) -> esq:enq(queue, Pri, ValGen()) end,
-      ok,
-      lists:seq(1, N)
-   ),
-   case Result of
+   Msg = [ValGen() || _ <- lists:seq(1, N)],
+   case esq:enq(queue, Pri, Msg) of
       ok              -> {ok, S};
       {error, Reason} -> {error, Reason, S}
    end;

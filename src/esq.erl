@@ -25,11 +25,13 @@
    ioctl/3,
    enq/2, 
    enq/3,
+   enq/4,
    enq_/2,
    enq_/3,
    deq/1, 
    deq/2, 
-   deq/3
+   deq/3,
+   deq/4
 ]).
 
 -type(msg() :: any()).
@@ -71,13 +73,18 @@ start_link(Name, Opts) ->
 %% synchronous message enqueue
 -spec(enq/2  :: (pid(), msg()) -> ok | {error, any()}).
 -spec(enq/3  :: (pid(), pri(), msg()) -> ok | {error, any()}).
+-spec(enq/4  :: (pid(), pri(), msg(), timeout()) -> ok | {error, any()}).
 
 enq(Pid, Msg) ->
    enq(Pid, ?ESQ_PRI_LOW, Msg).
 
 enq(Pid, Pri, Msg)
  when is_integer(Pri) ->  
-   gen_server:call(Pid, {enq, Pri, Msg}, ?ESQ_TIMEOUT).
+   enq(Pid, Pri, Msg, ?ESQ_TIMEOUT).
+
+enq(Pid, Pri, Msg, Timeout)
+ when is_integer(Pri) ->  
+   gen_server:call(Pid, {enq, Pri, Msg}, Timeout).
 
 
 %%
@@ -96,7 +103,9 @@ enq_(Pid, Pri, Msg)
 %%
 %% dequeue message
 -spec(deq/1 :: (pid()) -> [msg()] | {error, any()}).
--spec(deq/2 :: (pid(), pri()) -> [msg()] | {error, any()}).
+-spec(deq/2 :: (pid(), integer()) -> [msg()] | {error, any()}).
+-spec(deq/3 :: (pid(), pri(), integer()) -> [msg()] | {error, any()}).
+-spec(deq/4 :: (pid(), pri(), integer(), timeout()) -> [msg()] | {error, any()}).
 
 deq(Pid) ->
    deq(Pid, 1).
@@ -107,7 +116,11 @@ deq(Pid, N)
 
 deq(Pid, Pri, N)
  when is_integer(Pri), is_integer(N) ->
-   gen_server:call(Pid, {deq, Pri, N}, ?ESQ_TIMEOUT).
+   deq(Pid, Pri, N, ?ESQ_TIMEOUT).
+
+deq(Pid, Pri, N, Timeout)
+ when is_integer(Pri), is_integer(N) ->
+   gen_server:call(Pid, {deq, Pri, N}, Timeout).
 
 
 %%
