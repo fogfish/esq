@@ -58,7 +58,9 @@ start_link(Opts)
    start_link(undefined, Opts).
 
 start_link(Name, Opts) ->
-   case opts:get([heap, spool, fspool, tspool], heap, Opts) of
+   case opts:get([proc, heap, spool, fspool, tspool], proc, Opts) of
+      proc ->
+         esq_queue:start_link(Name, esq_proc, Opts);
       heap ->
          esq_queue:start_link(Name, esq_heap, Opts);
       {spool,  _} ->
