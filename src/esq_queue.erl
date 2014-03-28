@@ -191,7 +191,7 @@ set_ioctl([{ready,    X} | Opts], S) ->
    set_ioctl(Opts, S#queue{ready=X});
 set_ioctl([{sub,      X} | Opts], #queue{ready=R}=S)
  when is_integer(R) ->
-   set_ioctl(Opts, S#queue{sub=[X | S#queue.sub]});   
+   set_ioctl(Opts, pubsub(S#queue{sub=[X | S#queue.sub]}));   
 set_ioctl([_ | Opts], S) ->
    set_ioctl(Opts, S);
 set_ioctl([], S) ->
