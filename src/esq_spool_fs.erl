@@ -114,7 +114,9 @@ deq(Pri, N, #spool{iq=undefined}=S) ->
 deq(Pri, N, S) ->
    case deq_from_file(S#spool.iq, N, []) of
       {ok,  []} ->
+         {ok, File} = esq_file:filename(S#spool.iq),
          esq_file:delete(S#spool.iq),
+         file:del_dir(filename:dirname(File)),         
          deq(Pri, N, S#spool{iq=undefined});
       {ok, Msg} ->
          {ok, Msg, S};
@@ -141,8 +143,9 @@ deq_from_file(File, N, Acc) ->
 ttl(#spool{oq=undefined}=S) ->
    {ok, S};
 ttl(S) ->
+   {ok, File} = esq_file:filename(S#spool.oq),
    _ = esq_file:close(S#spool.oq),
-   _ = shift_file(S#spool.fs),
+   _ = shift_file(S#spool.fs, File),
    {ok, S#spool{
       oq      = undefined,
       written = 0
@@ -157,10 +160,19 @@ ttl(S) ->
 
 %%
 %%
+wx_filename(File, Ext) ->
+   filename:join([File, format:datetime("%Y%m%d", os:timestamp()), "q" ++ Ext]).
+
+rx_filename(File, Ext) ->
+   filename:join([File, "*", "q" ++ Ext]).
+
+%%
+%%
 open_writer(File) ->
-   case filelib:ensure_dir(File) of
+   FName = wx_filename(File, ?WRITER_EXT),
+   case filelib:ensure_dir(FName) of
       ok ->
-         esq_file:start_link(File ++ ?WRITER_EXT, [append, exclusive]);
+         esq_file:start_link(FName, [append, exclusive]);
       Error ->
          Error
    end.
@@ -168,7 +180,8 @@ open_writer(File) ->
 %%
 %%
 open_reader(File) ->
-   case filelib:wildcard(File ++ ?READER_EXT) of
+   FName = rx_filename(File, ?READER_EXT),
+   case filelib:wildcard(FName) of
       [] ->
          {error, enoent};
       [Head | _] ->
@@ -186,18 +199,29 @@ close_file(File) ->
 %%
 %%
 shift_file(File) ->
+   FName = rx_filename(File, ?WRITER_EXT),
+   case filelib:wildcard(FName) of
+      [] ->
+         ok;
+      [Head | _] ->
+         shift_file(File, Head),
+         shift_file(File)
+   end.
+
+shift_file(File, Segment) ->
    {A, B, C} = erlang:now(),
    Now = lists:flatten(
       io_lib:format(".~6..0b~6..0b~6..0b", [A, B, C])
    ),
-   file:rename(File ++ ?WRITER_EXT, File ++ Now).
+   file:rename(Segment, wx_filename(File, Now)).
 
 %%
 %%
 shift_queue(#spool{written=Out, segment=Len}=S)
  when Out > Len ->
+   {ok, File} = esq_file:filename(S#spool.oq),
    _ = esq_file:close(S#spool.oq),
-   _ = shift_file(S#spool.fs),
+   _ = shift_file(S#spool.fs, File),
    S#spool{
       oq      = undefined,
       written = 0

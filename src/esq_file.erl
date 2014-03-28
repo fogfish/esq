@@ -35,6 +35,7 @@
   ,write/2
   ,read/1
   ,delete/1
+  ,filename/1
 ]).
 
 %%
@@ -129,6 +130,14 @@ read(FD)
  when is_pid(FD) ->
    gen_server:call(FD, read, infinity). 
 
+%%
+%% return filename
+-spec(filename/1 :: (pid()) -> {ok, binary()}).
+
+filename(FD)
+ when is_pid(FD) ->
+   gen_server:call(FD, filename, infinity). 
+
 
 
 %%%----------------------------------------------------------------------------   
@@ -178,6 +187,9 @@ handle_call(read, Tx, #io{}=S) ->
       {Msg,  Cache} ->
          {reply, {ok, Msg}, S#io{cache=Cache}}
    end;   
+
+handle_call(filename, _Tx, #io{}=S) ->
+   {reply, {ok, S#io.file}, S};
 
 handle_call(_Req, _Tx, S) ->
    {noreply, S}.

@@ -37,7 +37,10 @@
    outbound = inf  :: inf | integer(),
    ttl      = undefined :: any(),
 
-   length   = 0         :: integer(),
+   ready    = undefined :: any(), %% queue ready capacity
+   sub      = []        :: any(), %% subscribed processes
+
+   length   = 0         :: integer(), %% number of elements in queue
    mod      = undefined :: atom(),
    q        = undefined :: any()
 }).
@@ -73,7 +76,8 @@ handle_call({enq, _, _}, _Tx, #queue{capacity=C, length=L}=S)
    {reply, {error, busy}, S}; 
 
 handle_call({enq, Pri, Msg}, _Tx, S) ->
-   enqueue(Pri, Msg, S);
+   {Result, State} = enqueue(Pri, Msg, S),
+   {reply, Result, pubsub(State)};
 
 %%
 %% dequeue message
@@ -130,19 +134,9 @@ handle_cast({enq, _, _}, #queue{capacity=C, length=L}=S)
  when L >= C ->
    {noreply, S}; 
 
-handle_cast({enq, Pri, Msg}, #queue{mod=Mod}=S) ->
-   case Mod:enq(Pri, Msg, S#queue.q) of
-      {ok, Q} ->
-         {noreply, 
-            S#queue{
-               length   = add(S#queue.length,   1),
-               inbound  = sub(S#queue.inbound,  1),
-               q        = Q
-            }
-         };
-      Error   ->
-         {reply, Error, S}
-   end;   
+handle_cast({enq, Pri, Msg}, #queue{}=S) ->
+   {_, State} = enqueue(Pri, Msg, S),
+   {noreply, pubsub(State)};
 
 handle_cast(_Req, S) ->
    {noreply, S}.
@@ -193,6 +187,11 @@ set_ioctl([{ttl,      X} | Opts], #queue{ttl=undefined}=S) ->
 set_ioctl([{ttl,      X} | Opts], S) ->
    _ = tempus:cancel(S#queue.ttl),
    set_ioctl(Opts, S#queue{ttl=tempus:event(X * 1000, ttl)});
+set_ioctl([{ready,    X} | Opts], S) ->
+   set_ioctl(Opts, S#queue{ready=X});
+set_ioctl([{sub,      X} | Opts], #queue{ready=R}=S)
+ when is_integer(R) ->
+   set_ioctl(Opts, S#queue{sub=[X | S#queue.sub]});   
 set_ioctl([_ | Opts], S) ->
    set_ioctl(Opts, S);
 set_ioctl([], S) ->
@@ -213,19 +212,19 @@ get_ioctl(_, _) ->
 %% enqueue message(s)
 enqueue(Pri, [Msg | Tail], S0) ->
    case enqueue(Pri, Msg, S0) of
-      {reply, ok, S} -> 
+      {ok, S} -> 
          enqueue(Pri, Tail, S);
       Error ->
          Error
    end;
 
 enqueue(Pri, [],  S) ->
-   {reply, ok, S};
+   {ok, S};
 
 enqueue(Pri, Msg, #queue{mod=Mod}=S) ->
    case Mod:enq(Pri, Msg, S#queue.q) of
       {ok, Q} ->
-         {reply, ok, 
+         {ok, 
             S#queue{
                length   = add(S#queue.length,   1),
                inbound  = sub(S#queue.inbound,  1),
@@ -233,7 +232,22 @@ enqueue(Pri, Msg, #queue{mod=Mod}=S) ->
             }
          };
       Error   ->
-         {reply, Error, S}
+         {Error, S}
    end.
+
+%%
+%% notify subscribers
+pubsub(#queue{ready=R, length=L}=S)
+ when is_integer(R), L >= R ->
+   % notify subscribed queues, messages are available
+   _ = lists:foreach(
+      fun(X) ->
+         erlang:send(X, {esq, self(), L})
+      end,
+      S#queue.sub
+   ),
+   S#queue{sub=[]};
+pubsub(S) ->
+   S.
 
 

@@ -129,8 +129,10 @@ deq(Pid, Pri, N, Timeout)
 %% queue i/o control:
 %%    capacity  - set high water mark for queue outstanding messages
 %%    length    - number of messages in queue (read-only)
-%%    inbound   - 
-%%    outbound  -
+%%    inbound   - inbound credit
+%%    outbound  - outbound credit
+%%    sub       - subscribe process to receive notification when queue is ready
+%%    ready     - set ready for reading threshold
 -spec(ioctl/2 :: (any(), pid()) -> any() | undefined).
 -spec(ioctl/3 :: (atom(), any(), pid()) -> ok | {error, any()}).
 
