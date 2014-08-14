@@ -40,8 +40,7 @@ new(_Id) ->
          } 
       }
    catch Error:Reason ->
-      lager:error("~p:~p ~p", [Error, Reason, erlang:get_stacktrace()]),
-      halt(1)
+      lager:error("~p:~p ~p", [Error, Reason, erlang:get_stacktrace()])
    end.
 
 %% 
@@ -71,11 +70,8 @@ run(deq, _KeyGen, _ValGen, S) ->
 
 %% init application
 init() ->
-   case applib:boot(esq, []) of
-      {error, {already_started, _}} -> 
-         ok;
-      _ ->
-         {ok, _} = esq:start_link(queue, basho_bench_config:get(esq_queue, []))
-   end.
+   esq:start(),
+   esq:start_link(queue, basho_bench_config:get(esq_queue, [])).
+
 
 

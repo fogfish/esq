@@ -32,13 +32,16 @@
 
 %% internal state
 -record(spool, {
-   fs   = undefined  :: list(),        %% path to spool folder
-   iq   = undefined  :: any(),         %% input  queue file
-   oq   = undefined  :: any(),         %% output queue file
+   fs  = undefined  :: list()        %% path to spool folder
+  ,iq  = undefined  :: any()         %% input  queue file
+  ,oq  = undefined  :: any()         %% output queue file
 
-   written = 0         :: integer(),  %% number of written bytes to segment
-   segment = undefined :: integer(),
-   ttl     = undefined :: any()
+  ,q     = undefined  :: datum:q()   %% in-memory output queue buffer  
+  ,dirty = 0          :: integer()   %% number of dirty (in-flight) messages    
+
+  ,written = 0         :: integer()  %% number of written bytes to segment
+  ,segment = undefined :: integer()
+  ,ttl     = undefined :: any()
 }).
 
 -define(DEFAULT_CONTENT, binary).
@@ -55,8 +58,10 @@ init(Opts) ->
    _   = shift_file(Fs),
    {ok, inf, 
       #spool{
-         fs      = Fs,
-         segment = opts:val(segment, ?DEFAULT_SEGMENT, Opts)
+         fs      = Fs
+        ,q       = deq:new()
+        ,dirty   = opts:val(dirty, 0 , Opts)
+        ,segment = opts:val(segment, ?DEFAULT_SEGMENT, Opts)
       }
    }.
 
@@ -73,11 +78,17 @@ free(_, #spool{}=S) ->
 
 %%
 %% enqueue message
-enq(_Pri, Msg, S) 
- when is_binary(Msg) ->
-   enq_to_file(<<?TYPE_BIN:8, Msg/binary>>, S);
-enq(_Pri, Msg, S) ->
-   enq_to_file(<<?TYPE_ERL:8, (erlang:term_to_binary(Msg))/binary>>, S).
+enq(_Pri, Msg, #spool{dirty=0}=State) ->
+   enq_to_file(encode(Msg), State);
+enq(_Pri, Msg, #spool{}=State) ->
+   Queue = deq:enq(encode(Msg), State#spool.q),
+   case deq:length(Queue) of
+      X when X >= State#spool.dirty ->
+         enq_to_file(deq:list(Queue), State#spool{q=deq:new()});
+      _ ->
+         {ok, State#spool{q=Queue}}
+   end.
+
 
 %%
 %%
@@ -105,7 +116,8 @@ enq_to_file(Msg, #spool{}=S) ->
 deq(Pri, N, #spool{iq=undefined}=S) ->
    case open_reader(S#spool.fs) of
       {error, enoent} -> 
-         {ok, [], S};
+         {Result, Q} = deq_from_dirty(N, S#spool.q),
+         {ok, Result, S#spool{q=Q}};
       {ok,  FD} -> 
          deq(Pri, N, S#spool{iq=FD});
       Error -> 
@@ -138,6 +150,14 @@ deq_from_file(File, N, Acc) ->
          Error
    end.
 
+deq_from_dirty(_, {}) ->
+   {[], {}};
+deq_from_dirty(0, Queue) ->
+   {[], Queue};
+deq_from_dirty(_, Queue) ->
+   {[decode(X) || X <- deq:list(Queue)], deq:new()}.
+
+
 %%
 %%
 ttl(#spool{oq=undefined}=S) ->
@@ -159,9 +179,22 @@ ttl(S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%% encode queue message
+encode(Msg) 
+ when is_binary(Msg) ->
+   <<?TYPE_BIN:8, Msg/binary>>;
+encode(Msg) ->
+   <<?TYPE_ERL:8, (erlang:term_to_binary(Msg))/binary>>.
+
+decode(<<?TYPE_BIN:8, Msg/binary>>) ->
+   Msg;
+decode(<<?TYPE_ERL:8, Msg/binary>>) ->
+   erlang:binary_to_term(Msg).
+
+%%
 %%
 wx_filename(File, Ext) ->
-   filename:join([File, format:datetime("%Y%m%d", os:timestamp()), "q" ++ Ext]).
+   filename:join([File, tempus:encode("%Y%m%d", os:timestamp()), "q" ++ Ext]).
 
 rx_filename(File, Ext) ->
    filename:join([File, "*", "q" ++ Ext]).

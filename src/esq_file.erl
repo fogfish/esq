@@ -160,7 +160,7 @@ handle_call({write, Bin}, _Tx, S) ->
    Chunk = encode(Bin),
    case file:write(S#io.fd, Chunk) of
       ok    -> 
-         {reply, {ok, byte_size(Chunk)}, S};
+         {reply, {ok, erlang:iolist_size(Chunk)}, S};
       Error -> 
          {reply, Error, S}
    end;
@@ -225,10 +225,15 @@ code_change(_Vsn, S, _Extra) ->
 %% see for optimization
 %%    http://erlang.org/pipermail/erlang-questions/2013-April/073292.html
 %%    https://gist.github.com/nox/5359459/raw/0b86154804b43b9043a3fed00debe284f4702f10/prealloc_bin.S
-encode(Msg) ->
+encode(Msg)
+ when is_binary(Msg) ->
    %% @todo double zero escape
    Hash   = ?HASH32(Msg),
-   <<0:16, (byte_size(Msg)):16, Hash:32, Msg/binary>>.
+   <<0:16, (byte_size(Msg)):16, Hash:32, Msg/binary>>;
+encode(Msg)
+ when is_list(Msg) ->
+   [encode(X) || X <- Msg].
+   
 
 decode(<<0:16, Len:16, Hash:32, Tail/binary>>) ->
    case byte_size(Tail) of
