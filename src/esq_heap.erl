@@ -21,7 +21,8 @@
 -export([
    init/1,
    free/2,
-   enq/3,
+   evict/2,
+   enq/4,
    deq/3,
    ttl/1
 ]).
@@ -56,8 +57,13 @@ free(_, S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%% evict messages
+evict(_TTL, Queue) ->
+   {ok, 0, Queue}.
+
+%%
 %% enqueue message
-enq(Pri, Msg, S) ->
+enq(_TTL, Pri, Msg, S) ->
    Seq = seq(S#queue.seq),
    _   = ets:insert(S#queue.heap, {{Pri, Seq}, Msg}),
    {ok, 

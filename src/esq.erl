@@ -14,6 +14,8 @@
 %%   See the License for the specific language governing permissions and
 %%   limitations under the License.
 %%
+%% @description
+%%   erlang simple queue
 -module(esq).
 -include("esq.hrl").
 
@@ -21,6 +23,7 @@
 -export([
    start_link/1, 
    start_link/2,
+   close/1,
    ioctl/2, 
    ioctl/3,
    enq/2, 
@@ -47,6 +50,19 @@ start() ->
 
 %%
 %% create new queue
+%%  Queue type
+%%    proc   - process container stores message as state 
+%%    heap   - ets ordered set stores message
+%%    spool  - dets stores messages (deprecated)
+%%    fspool - binary file stores message on file system
+%%    tspool - text file stores message on file system
+%%
+%%  Options
+%%    {capacity, integer()} - limit queue capacity, enqueue operation is rejected
+%%    {ttl,      integer()} - defines message time-to-live, expired message are dropped
+%%    {ready,    integer()} - queue ready watermark, the message {esq, pid(), integer()}
+%%                            is delivered to each subscriber when number of in-flight 
+%%                            messages exceeds the defined thresholds   
 -spec(start_link/1 :: (any()) -> {ok, pid()} | {error, any()}).
 -spec(start_link/2 :: (any(), list()) -> {ok, pid()} | {error, any()}).
 
@@ -72,6 +88,13 @@ start_link(Name, Opts) ->
    end.
 
 %%
+%% close queue
+-spec(close/1 :: (pid()) -> ok).
+
+close(Pid) ->
+   gen_server:call(Pid, close).
+
+%%
 %% synchronous message enqueue
 -spec(enq/2  :: (pid(), msg()) -> ok | {error, any()}).
 -spec(enq/3  :: (pid(), pri(), msg()) -> ok | {error, any()}).
@@ -85,9 +108,12 @@ enq(Pid, Pri, Msg)
    enq(Pid, Pri, Msg, ?ESQ_TIMEOUT).
 
 enq(Pid, Pri, Msg, Timeout)
- when is_integer(Pri) ->  
-   gen_server:call(Pid, {enq, Pri, Msg}, Timeout).
+ when is_integer(Pri), is_list(Msg) ->  
+   gen_server:call(Pid, {enq, Pri, Msg}, Timeout);
 
+enq(Pid, Pri, Msg, Timeout)
+ when is_integer(Pri) ->
+   enq(Pid, Pri, [Msg], Timeout).
 
 %%
 %% asynchronous message enqueue

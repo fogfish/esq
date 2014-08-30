@@ -25,7 +25,8 @@
 -export([
    init/1,
    free/2,
-   enq/3,
+   evict/2,
+   enq/4,
    deq/3,
    ttl/1
 ]).
@@ -77,10 +78,15 @@ free(_, #spool{}=S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%% evict messages
+evict(_TTL, Queue) ->
+   {ok, 0, Queue}.
+
+%%
 %% enqueue message
-enq(_Pri, Msg, #spool{dirty=0}=State) ->
+enq(_TTL, _Pri, Msg, #spool{dirty=0}=State) ->
    enq_to_file(encode(Msg), State);
-enq(_Pri, Msg, #spool{}=State) ->
+enq(_TTL, _Pri, Msg, #spool{}=State) ->
    Queue = deq:enq(encode(Msg), State#spool.q),
    case deq:length(Queue) of
       X when X >= State#spool.dirty ->

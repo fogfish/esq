@@ -21,7 +21,8 @@
 -export([
    init/1,
    free/2,
-   enq/3,
+   evict/2,
+   enq/4,
    deq/3,
    ttl/1
 ]).
@@ -36,7 +37,7 @@
 init(_Opts) ->
    {ok, 0, q:new()}.
 
-free(_, S) ->
+free(_, _Queue) ->
    ok.
 
 %%%----------------------------------------------------------------------------   
@@ -46,9 +47,28 @@ free(_, S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%% evict expired messages
+evict(TTL, Queue) ->
+   evict(0, TTL, Queue).
+
+evict(N, _TTL, {}=Queue) ->
+   {ok, N, Queue};
+evict(N,  TTL, Queue) ->
+   case q:head(Queue) of
+      {undefined, _} ->
+         {ok, N, Queue};
+
+      {X, _} when X =< TTL ->
+         evict(N + 1, TTL, q:tail(Queue));
+         
+      _ ->
+         {ok, N, Queue}
+   end.
+
+%%
 %% enqueue message
-enq(_Pri, Msg, Queue) ->
-   {ok, q:enq(Msg, Queue)}.
+enq(TTL, _Pri, Msg, Queue) ->
+   {ok, q:enq({TTL, Msg}, Queue)}.
 
 %%
 %% dequeue message
@@ -60,7 +80,7 @@ take(Acc, _, {} = Queue) ->
 take(Acc, 0, Queue) ->
    {ok, lists:reverse(Acc), Queue};
 take(Acc, N, Queue) ->
-   {Msg, NQueue} = q:deq(Queue),
+   {{_, Msg}, NQueue} = q:deq(Queue),
    take([Msg|Acc], N - 1, NQueue).
 
 %%

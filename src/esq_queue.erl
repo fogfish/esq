@@ -52,7 +52,7 @@ start_link(undefined, Mod, Opts) ->
 start_link(Name, Mod, Opts) ->
    gen_server:start_link({local, Name}, ?MODULE, [Name, Mod, Opts], []).
 
-init([Name, Mod, Opts]) ->
+init([_Name, Mod, Opts]) ->
    {ok, Len, Q} = Mod:init(Opts),
    {ok, set_ioctl(Opts, #queue{mod = Mod, q = Q, length = Len})}.
 
@@ -65,40 +65,20 @@ terminate(Reason, #queue{mod=Mod}=S) ->
 %%%
 %%%----------------------------------------------------------------------------   
 
-%%
-%% enqueue message
-handle_call({enq, _, _}, _Tx, #queue{inbound=X}=S)
- when X =< 0 ->
-   {reply, {error, busy}, S};
-
-handle_call({enq, _, _}, _Tx, #queue{capacity=C, length=L}=S) 
- when L =/= inf, L >= C ->
-   {reply, {error, busy}, S}; 
-
-handle_call({enq, Pri, Msg}, _Tx, S) ->
-   {Result, State} = enqueue(Pri, Msg, S),
-   {reply, Result, pubsub(State)};
 
 %%
-%% dequeue message
-handle_call({deq, _, _}, _Tx, #queue{outbound=X}=S)
- when X =< 0 ->
-   {reply, {error, busy}, S};
+%% 
+handle_call(close, _Tx, State) ->
+   {stop, normal, ok, State};
 
-handle_call({deq, Pri, N}, _Tx, #queue{mod=Mod}=S) ->
-   case Mod:deq(Pri, N, S#queue.q) of
-      {ok, Msg, Q} ->
-         Len      = length(Msg),
-         {reply, Msg, 
-            S#queue{
-               length   = sub(S#queue.length,   Len),
-               outbound = sub(S#queue.outbound, Len),
-               q        = Q
-            }
-         };
-      Error ->
-         {reply, Error, S}
-   end;
+handle_call({enq, Pri, Msg}, _Tx, State0) ->
+   {Result, State} = enqueue(Pri, Msg, State0),
+   {reply, Result, State};
+
+handle_call({deq, Pri, N}, _Tx, State0) ->
+   {Result, State} = dequeue(Pri, N, State0),
+   {reply, Result, State};
+
 
 %%
 %% ioctl
@@ -126,31 +106,13 @@ handle_call(_Req, _Tx, S) ->
    
 %%
 %% enqueue message
-handle_cast({enq, _, _}, #queue{inbound=X}=S)
- when X =< 0 ->
-   {noreply, S};
-
-handle_cast({enq, _, _}, #queue{capacity=C, length=L}=S) 
- when L >= C ->
-   {noreply, S}; 
-
-handle_cast({enq, Pri, Msg}, #queue{}=S) ->
-   {_, State} = enqueue(Pri, Msg, S),
-   {noreply, pubsub(State)};
+handle_cast({enq, Pri, Msg}, State0) ->
+   {_, State} = enqueue(Pri, Msg, State0),
+   {noreply, State};
 
 handle_cast(_Req, S) ->
    {noreply, S}.
 
-%%
-%%  
-handle_info(ttl, #queue{mod=Mod}=S) ->
-   {ok, Q} = Mod:ttl(S#queue.q),
-   {noreply,
-      S#queue{
-         ttl = tempus:reset(S#queue.ttl, ttl), 
-         q   = Q
-      }
-   };
 
 handle_info(_Msg, S) ->
    {noreply, S}.
@@ -167,7 +129,7 @@ code_change(_Vsn, S, _Extra) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% plus, minus math for infinity
+%% plus, minus math with infinity
 sub(inf, _) -> inf;
 sub(X,   Y) -> X - Y.
 
@@ -175,18 +137,15 @@ add(inf, _) -> inf;
 add(X,   Y) -> X + Y.
 
 %%
-%%
+%% set / get queue ioctrls
 set_ioctl([{capacity, X} | Opts], S) ->
    set_ioctl(Opts, S#queue{capacity=X});
 set_ioctl([{inbound,  X} | Opts], S) ->
    set_ioctl(Opts, S#queue{inbound=X});
 set_ioctl([{outbound, X} | Opts], S) ->
    set_ioctl(Opts, S#queue{outbound=X});
-set_ioctl([{ttl,      X} | Opts], #queue{ttl=undefined}=S) ->
-   set_ioctl(Opts, S#queue{ttl=tempus:event(X * 1000, ttl)});
 set_ioctl([{ttl,      X} | Opts], S) ->
-   _ = tempus:cancel(S#queue.ttl),
-   set_ioctl(Opts, S#queue{ttl=tempus:event(X * 1000, ttl)});
+   set_ioctl(Opts, S#queue{ttl=X});
 set_ioctl([{ready,    X} | Opts], S) ->
    set_ioctl(Opts, S#queue{ready=X});
 set_ioctl([{sub,      X} | Opts], #queue{ready=R}=S)
@@ -210,44 +169,116 @@ get_ioctl(_, _) ->
 
 %%
 %% enqueue message(s)
-enqueue(Pri, [Msg | Tail], S0) ->
-   case enqueue(Pri, Msg, S0) of
-      {ok, S} -> 
-         enqueue(Pri, Tail, S);
-      Error ->
-         Error
-   end;
+enqueue(Pri, Msg, State) ->
+   try
+      {ok, pubsub(enq(Pri, Msg, evict(State)))}
+   catch throw:Error ->
+      {Error, State}
+   end.
 
-enqueue(Pri, [],  S) ->
-   {ok, S};
+%%
+%% dequeue message(s)
+dequeue(Pri, N, State) ->
+   try
+      deq(Pri, N, evict(State))
+   catch throw:Error ->
+      {Error, State}
+   end.
 
-enqueue(Pri, Msg, #queue{mod=Mod}=S) ->
-   case Mod:enq(Pri, Msg, S#queue.q) of
-      {ok, Q} ->
-         {ok, 
-            S#queue{
-               length   = add(S#queue.length,   1),
-               inbound  = sub(S#queue.inbound,  1),
+%%
+%%
+enq(_Pri, _Msg, #queue{inbound=X})
+ when X =< 0 ->
+   %% inbound credits are consumer, queue waits for deq operation to increase credit 
+   throw({error, busy});
+
+enq(_Pri, _Msg, #queue{capacity=C, length=L})
+ when C =/= inf, L >= C ->
+   %% queue is out of capacity
+   throw({error, busy});
+
+
+enq(Pri, Msg, State) ->
+   TTL = ttl(State#queue.ttl),
+   lists:foldl(
+      fun(X, Acc) -> enq_msg(TTL, Pri, X, Acc) end,
+      State,
+      Msg
+   ).
+
+%%
+%%
+deq(_Pri, _N, #queue{outbound=X})
+ when X =< 0 ->
+   throw({error, busy});
+
+deq(Pri, N, State) ->
+   deq_msg(Pri, N, State).
+
+%%
+%%
+enq_msg(TTL, Pri, Msg, #queue{mod=Mod}=State) ->
+   case Mod:enq(TTL, Pri, Msg, State#queue.q) of
+      {ok, Queue} ->
+         State#queue{
+            length   = add(State#queue.length,   1),
+            inbound  = sub(State#queue.inbound,  1),
+            q        = Queue
+         };
+      Error   ->
+         throw(Error)
+   end.
+
+%%
+%%
+deq_msg(Pri, N, #queue{mod=Mod}=State) ->
+   case Mod:deq(Pri, N, State#queue.q) of
+      {ok, Msg, Q} ->
+         Len = length(Msg),
+         {Msg, 
+            State#queue{
+               length   = sub(State#queue.length,   Len),
+               outbound = sub(State#queue.outbound, Len),
                q        = Q
             }
          };
-      Error   ->
-         {Error, S}
+      Error ->
+         throw(Error)
    end.
 
 %%
 %% notify subscribers
-pubsub(#queue{ready=R, length=L}=S)
+pubsub(#queue{ready=R, length=L}=State)
  when is_integer(R), L >= R ->
    % notify subscribed queues, messages are available
    _ = lists:foreach(
       fun(X) ->
          erlang:send(X, {esq, self(), L})
       end,
-      S#queue.sub
+      State#queue.sub
    ),
-   S#queue{sub=[]};
-pubsub(S) ->
-   S.
+   State#queue{sub=[]};
+pubsub(State) ->
+   State.
 
+%%
+%% evict expired message
+evict(#queue{mod=Mod}=State) ->
+   case Mod:evict(os:timestamp(), State#queue.q) of
+      {ok, N, Queue} ->
+         State#queue{
+            length   = sub(State#queue.length,   N),
+            outbound = sub(State#queue.outbound, N),
+            q        = Queue
+         };
+      Error ->
+         throw(Error)
+   end.
+
+%%
+%% return ttl value
+ttl(undefined) ->
+   undefined;
+ttl(TTL) ->
+   tempus:add(os:timestamp(), TTL).
 

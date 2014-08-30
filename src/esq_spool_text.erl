@@ -25,7 +25,8 @@
 -export([
    init/1,
    free/2,
-   enq/3,
+   evict/2,
+   enq/4,
    deq/3,
    ttl/1
 ]).
@@ -68,14 +69,19 @@ free(_, #spool{}=S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%% evict messages
+evict(_TTL, Queue) ->
+   {ok, 0, Queue}.
+
+%%
 %% enqueue message
-enq(_Pri, Msg, S) 
+enq(_TTL, _Pri, Msg, S) 
  when is_binary(Msg) ->
    case binary:last(Msg) of
       $\n -> enq_to_file(Msg, S);
       _   -> enq_to_file(<<Msg/binary, $\n>>, S)
    end;
-enq(_Pri, Msg, S) ->
+enq(_TTL, _Pri, Msg, S) ->
    {error, badarg}.
 
 %%
@@ -155,7 +161,7 @@ ttl(S) ->
 %%
 %% make queue filename 
 wx_filename(File, Ext) ->
-   filename:join([File, format:datetime("%Y%m%d", os:timestamp()), "q" ++ Ext]).
+   filename:join([File, tempus:encode("%Y%m%d", os:timestamp()), "q" ++ Ext]).
 
 rx_filename(File, Ext) ->
    filename:join([File, "*", "q" ++ Ext]).
