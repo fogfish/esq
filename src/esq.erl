@@ -124,8 +124,12 @@ enq_(Pid, Msg) ->
    enq_(Pid, ?ESQ_PRI_LOW, Msg).
 
 enq_(Pid, Pri, Msg)
- when is_integer(Pri) ->  
-   gen_server:cast(Pid, {enq, Pri, Msg}).
+ when is_integer(Pri), is_list(Msg) ->  
+   gen_server:cast(Pid, {enq, Pri, Msg});
+
+enq_(Pid, Pri, Msg)
+ when is_integer(Pri) ->
+   enq_(Pid, Pri, [Msg]).
 
 
 %%
@@ -163,7 +167,7 @@ deq(Pid, Pri, N, Timeout)
 -spec(ioctl/3 :: (atom(), any(), pid()) -> ok | {error, any()}).
 
 ioctl(Req, Pid) ->
-   gen_server:call(Pid, {ioctl, Req}).
+   gen_server:call(Pid, {ioctl, Req}, infinity).
 
 ioctl(Key, Val, Pid) ->
    ioctl({Key, Val}, Pid).
