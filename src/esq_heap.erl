@@ -23,8 +23,7 @@
    free/2,
    evict/2,
    enq/4,
-   deq/3,
-   ttl/1
+   deq/3
 ]).
 
 %% internal state
@@ -58,7 +57,7 @@ free(_, S) ->
 
 %%
 %% evict messages
-evict(_TTL, Queue) ->
+evict(_T, Queue) ->
    {ok, 0, Queue}.
 
 %%
@@ -83,10 +82,6 @@ deq(Pri, N, S) ->
          {ok, [X || {_, X} <- Msg], S}
    end.
 
-%%
-%%
-ttl(S) ->
-   {ok, S}.
 
 %%%----------------------------------------------------------------------------   
 %%%

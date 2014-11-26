@@ -36,6 +36,7 @@
    inbound  = inf  :: inf | integer(),
    outbound = inf  :: inf | integer(),
    ttl      = undefined :: any(),
+   t        = undefined :: any(),
 
    ready    = undefined :: any(), %% queue ready capacity
    sub      = []        :: any(), %% subscribed processes
@@ -113,6 +114,9 @@ handle_cast({enq, Pri, Msg}, State0) ->
 handle_cast(_Req, S) ->
    {noreply, S}.
 
+handle_info(ttl, State0) ->
+   State = evict(State0),
+   {noreply, State#queue{ttl = tempus:timer(State#queue.ttl, ttl)}};
 
 handle_info(_Msg, S) ->
    {noreply, S}.
@@ -144,8 +148,18 @@ set_ioctl([{inbound,  X} | Opts], S) ->
    set_ioctl(Opts, S#queue{inbound=X});
 set_ioctl([{outbound, X} | Opts], S) ->
    set_ioctl(Opts, S#queue{outbound=X});
+set_ioctl([{ttl, undefined} | Opts], #queue{ttl=undefined}=S) ->
+   set_ioctl(Opts, S);
+set_ioctl([{ttl,      X} | Opts], #queue{ttl=undefined}=S) ->
+   set_ioctl(Opts, S#queue{ttl=tempus:timer(tempus:t(s, X), ttl), t=X});
+set_ioctl([{ttl, undefined} | Opts], S) ->
+   _ = tempus:cancel(S#queue.ttl),
+   set_ioctl(Opts, S#queue{ttl=undefined});
 set_ioctl([{ttl,      X} | Opts], S) ->
-   set_ioctl(Opts, S#queue{ttl=X});
+   _ = tempus:cancel(S#queue.ttl),
+   set_ioctl(Opts, S#queue{ttl=tempus:timer(tempus:t(s, X), ttl), t=X});
+% set_ioctl([{ttl,      X} | Opts], S) ->
+%    set_ioctl(Opts, S#queue{ttl=X});
 set_ioctl([{ready,    X} | Opts], S) ->
    set_ioctl(Opts, S#queue{ready=X});
 set_ioctl([{sub,      X} | Opts], #queue{ready=R}=S)
@@ -171,7 +185,7 @@ get_ioctl(_, _) ->
 %% enqueue message(s)
 enqueue(Pri, Msg, State) ->
    try
-      {ok, pubsub(enq(Pri, Msg, evict(State)))}
+      {ok, pubsub(enq(Pri, Msg, State))}
    catch throw:Error ->
       {Error, State}
    end.
@@ -180,7 +194,7 @@ enqueue(Pri, Msg, State) ->
 %% dequeue message(s)
 dequeue(Pri, N, State) ->
    try
-      deq(Pri, N, evict(State))
+      deq(Pri, N, State)
    catch throw:Error ->
       {Error, State}
    end.
@@ -199,7 +213,7 @@ enq(_Pri, _Msg, #queue{capacity=C, length=L})
 
 
 enq(Pri, Msg, State) ->
-   TTL = ttl(State#queue.ttl),
+   TTL = ttl(State#queue.t),
    lists:foldl(
       fun(X, Acc) -> enq_msg(TTL, Pri, X, Acc) end,
       State,

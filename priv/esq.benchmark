@@ -21,14 +21,14 @@
 
 {operations, [
    {enq,     2},
-   {deq,     0} 
+   {deq,     1} 
 ]}.
 
 {esq_priority,   10}.
 %{esq_batch,     100}.
-{esq_queue,      []}.
+%{esq_queue,      [{ttl,  60}]}.
 %{esq_queue,      [heap]}.
 %{esq_queue,      [{spool, "/tmp/spool.esq"}, {bulk, 100}]}.
-%{esq_queue,      [{fspool, "/tmp/spool"}, {segment, 100000000}]}.
+{esq_queue,      [{fspool, "/tmp/spool"}, {ttl, 5}, {segment, 100000000}]}.
 %{esq_queue,      [{fspool, "/tmp/spool"}, {segment, 100000000}, {dirty, 1000}]}.
 %{esq_queue,      [{tspool, "/tmp/spool"}, {segment, 1000000}]}.

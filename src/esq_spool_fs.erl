@@ -27,8 +27,7 @@
    free/2,
    evict/2,
    enq/4,
-   deq/3,
-   ttl/1
+   deq/3
 ]).
 
 %% internal state
@@ -78,9 +77,18 @@ free(_, #spool{}=S) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% evict messages
-evict(_TTL, Queue) ->
-   {ok, 0, Queue}.
+%% evict messages (shift queue segment)
+evict(_T, #spool{oq=undefined}=S) ->
+   {ok, 0, S};
+evict(_T, S) ->
+   {ok, File} = esq_file:filename(S#spool.oq),
+   _ = esq_file:close(S#spool.oq),
+   _ = shift_file(S#spool.fs, File),
+   {ok, 0, S#spool{
+      oq      = undefined,
+      written = 0
+   }}.
+
 
 %%
 %% enqueue message
@@ -162,20 +170,6 @@ deq_from_dirty(0, Queue) ->
    {[], Queue};
 deq_from_dirty(_, Queue) ->
    {[decode(X) || X <- deq:list(Queue)], deq:new()}.
-
-
-%%
-%%
-ttl(#spool{oq=undefined}=S) ->
-   {ok, S};
-ttl(S) ->
-   {ok, File} = esq_file:filename(S#spool.oq),
-   _ = esq_file:close(S#spool.oq),
-   _ = shift_file(S#spool.fs, File),
-   {ok, S#spool{
-      oq      = undefined,
-      written = 0
-   }}.
 
 
 %%%----------------------------------------------------------------------------   

@@ -154,7 +154,7 @@ ttl(Pid) ->
      ,?_assertMatch([<<"msg">>], esq:deq(Pid))   
 
      ,?_assertMatch(ok, esq:enq(Pid, <<"msg">>))
-     ,?_assertMatch(ok,  timer:sleep(100))
+     ,?_assertMatch(ok,  timer:sleep(150))
      ,?_assertMatch([], esq:deq(Pid))
 
      ,?_assertMatch(ok, esq:ioctl(ttl, undefined, Pid))

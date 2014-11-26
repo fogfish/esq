@@ -23,8 +23,7 @@
    free/2,
    evict/2,
    enq/4,
-   deq/3,
-   ttl/1
+   deq/3
 ]).
 
 
@@ -48,18 +47,18 @@ free(_, _Queue) ->
 
 %%
 %% evict expired messages
-evict(TTL, Queue) ->
-   evict(0, TTL, Queue).
+evict(T, Queue) ->
+   evict(0, T, Queue).
 
-evict(N, _TTL, {}=Queue) ->
+evict(N, _T, {}=Queue) ->
    {ok, N, Queue};
-evict(N,  TTL, Queue) ->
+evict(N,  T, Queue) ->
    case q:head(Queue) of
       {undefined, _} ->
          {ok, N, Queue};
 
-      {X, _} when X =< TTL ->
-         evict(N + 1, TTL, q:tail(Queue));
+      {X, _} when X =< T ->
+         evict(N + 1, T, q:tail(Queue));
          
       _ ->
          {ok, N, Queue}
@@ -83,10 +82,6 @@ take(Acc, N, Queue) ->
    {{_, Msg}, NQueue} = q:deq(Queue),
    take([Msg|Acc], N - 1, NQueue).
 
-%%
-%%
-ttl(S) ->
-   {ok, S}.
 
 %%%----------------------------------------------------------------------------   
 %%%
