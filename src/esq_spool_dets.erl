@@ -1,8 +1,7 @@
 %% @description
-%%    dets-based spool
+%%    dets-based spool 
 %%
-%% @todo
-%%   * support priorities 
+%% @deprecated
 -module(esq_spool_dets).
 
 -export([

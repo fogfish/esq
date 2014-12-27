@@ -62,7 +62,8 @@ start() ->
 %%    {ttl,      integer()} - defines message time-to-live, expired message are dropped
 %%    {ready,    integer()} - queue ready watermark, the message {esq, pid(), integer()}
 %%                            is delivered to each subscriber when number of in-flight 
-%%                            messages exceeds the defined thresholds   
+%%                            messages exceeds the defined thresholds
+%%    {policy,   fifo | lifo} - queue policy 
 -spec(start_link/1 :: (any()) -> {ok, pid()} | {error, any()}).
 -spec(start_link/2 :: (any(), list()) -> {ok, pid()} | {error, any()}).
 

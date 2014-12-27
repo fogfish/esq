@@ -41,11 +41,11 @@
 
   ,written = 0         :: integer()  %% number of written bytes to segment
   ,segment = undefined :: integer()
-  ,ttl     = undefined :: any()
+  ,policy  = undefined :: atom()     %% queue policy
 }).
 
--define(DEFAULT_CONTENT, binary).
 -define(DEFAULT_SEGMENT, 512 * 1024).
+-define(DEFAULT_POLICY,  fifo).
 -define(WRITER_EXT,      ".spool").
 -define(READER_EXT,      ".[0-9]*").
 
@@ -54,14 +54,15 @@
 
 
 init(Opts) ->
-   Fs  = opts:val(fspool, Opts),
-   _   = shift_file(Fs),
+   Fs     = opts:val(fspool, Opts),
+   _      = shift_file(Fs),
    {ok, inf, 
       #spool{
          fs      = Fs
         ,q       = deq:new()
         ,dirty   = opts:val(dirty, 0 , Opts)
         ,segment = opts:val(segment, ?DEFAULT_SEGMENT, Opts)
+        ,policy  = opts:val(policy,  ?DEFAULT_POLICY, Opts)
       }
    }.
 
@@ -127,8 +128,8 @@ enq_to_file(Msg, #spool{}=S) ->
  
 %%
 %% dequeue message
-deq(Pri, N, #spool{iq=undefined}=S) ->
-   case open_reader(S#spool.fs) of
+deq(Pri, N, #spool{iq=undefined, policy=Policy}=S) ->
+   case open_reader(Policy, S#spool.fs) of
       {error, enoent} -> 
          {Result, Q} = deq_from_dirty(N, S#spool.q),
          {ok, Result, S#spool{q=Q}};
@@ -212,13 +213,22 @@ open_writer(File) ->
 
 %%
 %%
-open_reader(File) ->
+open_reader(fifo, File) ->
    FName = rx_filename(File, ?READER_EXT),
    case filelib:wildcard(FName) of
       [] ->
          {error, enoent};
       [Head | _] ->
          esq_file:start_link(Head, [])
+   end;
+
+open_reader(lifo, File) ->
+   FName = rx_filename(File, ?READER_EXT),
+   case filelib:wildcard(FName) of
+      [] ->
+         {error, enoent};
+      List ->
+         esq_file:start_link(lists:last(List), [])
    end.
 
 %%
@@ -247,6 +257,7 @@ shift_file(File, Segment) ->
       io_lib:format(".~6..0b~6..0b~6..0b", [A, B, C])
    ),
    file:rename(Segment, wx_filename(File, Now)).
+
 
 %%
 %%

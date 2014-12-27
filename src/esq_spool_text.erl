@@ -38,21 +38,22 @@
 
    written = 0         :: integer(),  %% number of written bytes to segment
    segment = undefined :: integer(),
-   ttl     = undefined :: any()
+   policy  = undefined :: atom()
 }).
 
--define(DEFAULT_CONTENT, binary).
 -define(DEFAULT_SEGMENT, 512 * 1024).
+-define(DEFAULT_POLICY,  fifo).
 -define(WRITER_EXT,      ".spool").
 -define(READER_EXT,      ".[0-9]*").
 
 init(Opts) ->
-   Fs  = opts:val(tspool, Opts),
-   _   = shift_file(Fs),
+   Fs     = opts:val(tspool, Opts),
+   _      = shift_file(Fs),
    {ok, inf, 
       #spool{
-         fs      = Fs,
-         segment = opts:val(segment, ?DEFAULT_SEGMENT, Opts)
+         fs      = Fs
+        ,segment = opts:val(segment, ?DEFAULT_SEGMENT, Opts)
+        ,policy  = opts:val(policy,  ?DEFAULT_POLICY, Opts)
       }
    }.
 
@@ -88,7 +89,7 @@ enq(_TTL, _Pri, Msg, S)
       $\n -> enq_to_file(Msg, S);
       _   -> enq_to_file(<<Msg/binary, $\n>>, S)
    end;
-enq(_TTL, _Pri, Msg, S) ->
+enq(_TTL, _Pri, _Msg, _S) ->
    {error, badarg}.
 
 %%
@@ -111,8 +112,8 @@ enq_to_file(Msg, #spool{}=S) ->
  
 %%
 %% dequeue message
-deq(Pri, N, #spool{iq=undefined}=S) ->
-   case open_reader(S#spool.fs) of
+deq(Pri, N, #spool{iq=undefined, policy=Policy}=S) ->
+   case open_reader(Policy, S#spool.fs) of
       {error, enoent} -> 
          {ok, [], S};
       {ok,  FD} -> 
@@ -173,14 +174,24 @@ open_writer(File) ->
 
 %%
 %%
-open_reader(File) ->
+open_reader(fifo, File) ->
    FName = rx_filename(File, ?READER_EXT),
    case filelib:wildcard(FName) of
       [] ->
          {error, enoent};
       [Head | _] ->
          file:open(Head, [binary])
+   end;
+
+open_reader(lifo, File) ->
+   FName = rx_filename(File, ?READER_EXT),
+   case filelib:wildcard(FName) of
+      [] ->
+         {error, enoent};
+      List ->
+         esq_file:start_link(lists:last(List), [])
    end.
+
 
 %%
 %%
@@ -208,6 +219,7 @@ shift_file(File, Segment) ->
       io_lib:format(".~6..0b~6..0b~6..0b", [A, B, C])
    ),
    file:rename(Segment, wx_filename(File, Now)).
+
 
 %%
 %%
