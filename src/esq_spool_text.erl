@@ -47,8 +47,8 @@
 -define(READER_EXT,      ".[0-9]*").
 
 init(Opts) ->
-   Fs     = opts:val(tspool, Opts),
-   _      = shift_file(Fs),
+   Fs = opts:val(tspool, Opts),
+   ok = shift_file(Fs),
    {ok, inf, 
       #spool{
          fs      = Fs
@@ -74,8 +74,8 @@ evict(_T, #spool{oq=undefined}=S) ->
    {ok, 0, S};
 evict(_T, S) ->
    {ok, File} = file:pid2name(S#spool.oq),
-   _ = file:close(S#spool.oq),
-   _ = shift_file(S#spool.fs, File),
+   _  = file:close(S#spool.oq),
+   ok = shift_file(S#spool.fs, File),
    {ok, 0, S#spool{
       oq      = undefined,
       written = 0
@@ -209,8 +209,8 @@ shift_file(File) ->
       [] ->
          ok;
       [Head | _] ->
-         shift_file(File, Head),
-         shift_file(File)
+         ok = shift_file(File, Head),
+         ok = shift_file(File)
    end.
 
 shift_file(File, Segment) ->
@@ -218,9 +218,10 @@ shift_file(File, Segment) ->
    Now = lists:flatten(
       io_lib:format(".~6..0b~6..0b~6..0b", [A, B, C])
    ),
-   file:rename(Segment, wx_filename(File, Now)).
-
-
+   New = wx_filename(File, Now),
+   ok  = filelib:ensure_dir(New),
+   ok  = file:rename(Segment, New).
+ 
 %%
 %%
 shift_queue(#spool{written=Out, segment=Len}=S)

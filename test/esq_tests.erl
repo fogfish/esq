@@ -150,7 +150,7 @@ ttl(Pid) ->
       ?_assertMatch(ok, esq:ioctl(ttl, {0,0,100000}, Pid))
      
      ,?_assertMatch(ok, esq:enq(Pid, <<"msg">>))
-     ,?_assertMatch(ok, timer:sleep(50))
+     ,?_assertMatch(ok, timer:sleep(40))
      ,?_assertMatch([<<"msg">>], esq:deq(Pid))   
 
      ,?_assertMatch(ok, esq:enq(Pid, <<"msg">>))
