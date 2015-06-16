@@ -39,7 +39,7 @@
    t        = undefined :: any(),
 
    ready    = undefined :: any(), %% queue ready capacity
-   sub      = []        :: any(), %% subscribed processes
+   sub      = undefined :: any(), %% subscribed processes
 
    length   = 0         :: integer(), %% number of elements in queue
    mod      = undefined :: atom(),
@@ -55,7 +55,7 @@ start_link(Name, Mod, Opts) ->
 
 init([_Name, Mod, Opts]) ->
    {ok, Len, Q} = Mod:init(Opts),
-   {ok, set_ioctl(Opts, #queue{mod = Mod, q = Q, length = Len})}.
+   {ok, set_ioctl(Opts, #queue{mod = Mod, q = Q, length = Len, sub = gb_sets:new()})}.
 
 terminate(Reason, #queue{mod=Mod}=S) ->
    Mod:free(Reason, S#queue.q).
@@ -164,7 +164,7 @@ set_ioctl([{ready,    X} | Opts], S) ->
    set_ioctl(Opts, S#queue{ready=X});
 set_ioctl([{sub,      X} | Opts], #queue{ready=R}=S)
  when is_integer(R) ->
-   set_ioctl(Opts, pubsub(S#queue{sub=[X | S#queue.sub]}));   
+   set_ioctl(Opts, pubsub(S#queue{sub=gb_sets:add(X, S#queue.sub)}));   
 set_ioctl([_ | Opts], S) ->
    set_ioctl(Opts, S);
 set_ioctl([], S) ->
@@ -210,7 +210,6 @@ enq(_Pri, _Msg, #queue{capacity=C, length=L})
  when C =/= inf, L >= C ->
    %% queue is out of capacity
    throw({error, busy});
-
 
 enq(Pri, Msg, State) ->
    TTL = ttl(State#queue.t),
@@ -265,13 +264,14 @@ deq_msg(Pri, N, #queue{mod=Mod}=State) ->
 pubsub(#queue{ready=R, length=L}=State)
  when is_integer(R), L >= R ->
    % notify subscribed queues, messages are available
-   _ = lists:foreach(
-      fun(X) ->
+   _ = gb_sets:fold(
+      fun(X, _) ->
          erlang:send(X, {esq, self(), L})
       end,
+      ok,
       State#queue.sub
    ),
-   State#queue{sub=[]};
+   State#queue{sub=gb_sets:new()};
 pubsub(State) ->
    State.
 
