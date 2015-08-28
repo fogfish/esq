@@ -3,7 +3,6 @@
   ,"./deps/feta"
   ,"./deps/datum"
   ,"./deps/uid"
-  ,"./deps/eep"
 ]}.
 {log_level,       info}.
 {report_interval, 1}.
@@ -13,7 +12,7 @@
 %% workload
 {mode,            max}.
 {duration,          1}.
-{concurrent,       10}.
+{concurrent,        4}.
  
 {key_generator,   {uniform_int, 10000000}}.
 {value_generator, {fixed_bin,   1024}}.
@@ -26,8 +25,7 @@
 %%
 %% test queue 
 {queue,  [
-% {capacity,  1000}
-% ,{fspool,    "/tmp/b"}
-% ,{tts,       5000}
-% {ttl, 10}
+  %  {capacity,  1000}
+  % ,{fspool,    "/tmp/b"}
+  % ,{tts,       5000}
 ]}.

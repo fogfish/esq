@@ -15,16 +15,6 @@
 %%   limitations under the License.
 %%
 
-% %% default priorities
-% -define(ESQ_PRI_LOW,  16#ffffffff).
-% -define(ESQ_PRI_HIGH,        16#0).
-
-%% default timeout
--define(ESQ_TIMEOUT,       60000).
-
-%% default vardir for persistent queues
--define(VARDIR,  "/var/spool/esq").
-
 %%
 %% file extension for queue segments
 -define(WRITER,      ".spool").
@@ -39,3 +29,17 @@
 %%
 %% message hash function
 -define(HASH32(X),  erlang:crc32(X)).
+
+%%
+%% queue data structure
+-record(q, {
+   head     = undefined :: datum:q()     %% in-memory queue head
+  ,tail     = undefined :: any()         %% on-disk overflow queue tail
+  ,heap     = undefined :: datum:heap()  %% in-flight heap
+
+  ,capacity = undefined :: integer()     %% number of message to keep in-memory
+  ,ttf      = undefined :: any()         %% message visibility timeout, time to keep message in-flight queue
+  ,ttl      = undefined :: any()         %% message time-to-live
+  ,tts      = undefined :: any()         %% message time-to-sync
+  ,tte      = undefined :: any()         %% time to expired
+}).

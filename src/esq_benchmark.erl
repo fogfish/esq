@@ -25,31 +25,23 @@
 
 %%
 %%
-new(1) ->
+new(Id) ->
    lager:set_loglevel(lager_console_backend, 
       basho_bench_config:get(log_level, info)
    ),
    esq:start(),
-   esq:start_link(queue, 
-      basho_bench_config:get(queue, [])
-   ),
-   {ok, queue};
-new(_) ->
-   {ok, queue}.
+   {ok, init(Id)}.
 
 %% 
 run(enq, _KeyGen, ValGen, Queue) ->
-   case esq:enq(Queue, ValGen()) of
-      ok              -> {ok, Queue};
-      {error, Reason} -> {error, Reason, Queue}
-   end;
+   {ok, esq:enq(ValGen(), Queue)};
 
-
-run(deq, _KeyGen, _ValGen, Queue) ->
-   case esq:deq(Queue) of
-      {error, Reason} -> {error, Reason, Queue};
-      {ok, []}        -> {error, not_found, Queue};
-      {ok,  _}        -> {ok, Queue}
+run(deq, _KeyGen, _ValGen, Queue0) ->
+   case esq:deq(Queue0) of
+      {[], Queue1} ->
+         {error, not_found, Queue1};
+      {_ , Queue1} ->
+         {ok, Queue1}
    end.
 
 %%%----------------------------------------------------------------------------   
@@ -58,5 +50,14 @@ run(deq, _KeyGen, _ValGen, Queue) ->
 %%%
 %%%----------------------------------------------------------------------------   
 
+init(Id) ->
+   Config = basho_bench_config:get(queue, []),
+   case lists:keytake(fspool, 1, Config) of
+      false ->
+         esq:new(Config);
+      {value, {fspool, Root}, Tail} ->
+         Path = filename:join([Root, scalar:c(Id)]),
+         esq:new([{fspool, Path}| Tail])
+   end.
 
 
