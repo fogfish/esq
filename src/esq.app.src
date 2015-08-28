@@ -1,20 +1,15 @@
 {application, esq,
    [
       {description, "erlang simple queue"},
-      {vsn,         "0.8.5"},
-      {modules,     [
-         esq,
-         esq_heap,
-         esq_sup,
-         esq_app
-      ]},
+      {vsn,         "0.9.0"},
+      {modules,     []},
       {registered,  []},
       {applications,[
-         % core
          kernel
         ,stdlib
         ,feta
         ,datum
+        ,uid
       ]},
       {mod, {esq_app, []}},
       {env, []}

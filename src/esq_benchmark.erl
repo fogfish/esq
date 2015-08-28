@@ -19,59 +19,44 @@
 -module(esq_benchmark).
 
 -export([
-   new/1, run/4
+   new/1
+  ,run/4
 ]).
 
-%% internal state
--record(fsm, {
-   pri   = undefined :: integer(),  % priority range
-   batch = undefined :: integer()   % size of batch operation
-}).
-
 %%
-new(_Id) ->
-   try
-      lager:set_loglevel(lager_console_backend, basho_bench_config:get(log_level, info)),
-      _ = init(),
-      {ok,
-         #fsm{
-            pri   = basho_bench_config:get(esq_priority, 16#ffffffff),
-            batch = basho_bench_config:get(esq_batch,    1)
-         } 
-      }
-   catch Error:Reason ->
-      lager:error("~p:~p ~p", [Error, Reason, erlang:get_stacktrace()])
-   end.
+%%
+new(1) ->
+   lager:set_loglevel(lager_console_backend, 
+      basho_bench_config:get(log_level, info)
+   ),
+   esq:start(),
+   esq:start_link(queue, 
+      basho_bench_config:get(queue, [])
+   ),
+   {ok, queue};
+new(_) ->
+   {ok, queue}.
 
 %% 
-run(enq, _KeyGen, ValGen, S) ->
-   N   = random:uniform(S#fsm.batch),
-   Pri = random:uniform(S#fsm.pri),
-   Msg = [ValGen() || _ <- lists:seq(1, N)],
-   case esq:enq(queue, Pri, Msg) of
-      ok              -> {ok, S};
-      {error, Reason} -> {error, Reason, S}
+run(enq, _KeyGen, ValGen, Queue) ->
+   case esq:enq(Queue, ValGen()) of
+      ok              -> {ok, Queue};
+      {error, Reason} -> {error, Reason, Queue}
    end;
 
-run(deq, _KeyGen, _ValGen, S) ->
-   N = random:uniform(S#fsm.batch),
-   case esq:deq(queue, N) of
-      {error, Reason} -> {error, Reason, S};
-      []              -> {error, not_found, S};
-      _               -> {ok, S}
-   end.
 
+run(deq, _KeyGen, _ValGen, Queue) ->
+   case esq:deq(Queue) of
+      {error, Reason} -> {error, Reason, Queue};
+      {ok, []}        -> {error, not_found, Queue};
+      {ok,  _}        -> {ok, Queue}
+   end.
 
 %%%----------------------------------------------------------------------------   
 %%%
 %%% private
 %%%
 %%%----------------------------------------------------------------------------   
-
-%% init application
-init() ->
-   esq:start(),
-   esq:start_link(queue, basho_bench_config:get(esq_queue, [])).
 
 
 

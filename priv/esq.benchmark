@@ -2,13 +2,12 @@
    "./ebin"
   ,"./deps/feta"
   ,"./deps/datum"
+  ,"./deps/uid"
+  ,"./deps/eep"
 ]}.
 {log_level,       info}.
 {report_interval, 1}.
-%{report_interval, 10}.
 {driver,          esq_benchmark}.
-
-
 
 %%
 %% workload
@@ -20,15 +19,15 @@
 {value_generator, {fixed_bin,   1024}}.
 
 {operations, [
-   {enq,     2},
+   {enq,     1},
    {deq,     1} 
 ]}.
 
-{esq_priority,   10}.
-%{esq_batch,     100}.
-%{esq_queue,      [{ttl,  60}]}.
-%{esq_queue,      [heap]}.
-%{esq_queue,      [{spool, "/tmp/spool.esq"}, {bulk, 100}]}.
-{esq_queue,      [{fspool, "/tmp/spool"}, {ttl, 5}, {segment, 100000000}]}.
-%{esq_queue,      [{fspool, "/tmp/spool"}, {segment, 100000000}, {dirty, 1000}]}.
-%{esq_queue,      [{tspool, "/tmp/spool"}, {segment, 1000000}]}.
+%%
+%% test queue 
+{queue,  [
+% {capacity,  1000}
+% ,{fspool,    "/tmp/b"}
+% ,{tts,       5000}
+% {ttl, 10}
+]}.

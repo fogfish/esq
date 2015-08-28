@@ -15,9 +15,9 @@
 %%   limitations under the License.
 %%
 
-%% default priorities
--define(ESQ_PRI_LOW,  16#ffffffff).
--define(ESQ_PRI_HIGH,        16#0).
+% %% default priorities
+% -define(ESQ_PRI_LOW,  16#ffffffff).
+% -define(ESQ_PRI_HIGH,        16#0).
 
 %% default timeout
 -define(ESQ_TIMEOUT,       60000).
@@ -25,3 +25,17 @@
 %% default vardir for persistent queues
 -define(VARDIR,  "/var/spool/esq").
 
+%%
+%% file extension for queue segments
+-define(WRITER,      ".spool").
+-define(READER,      ".[0-9a-f]*").
+
+%%
+%% queue segment size 64MB
+-define(SEGMENT,     67108864).
+-define(CHUNK,          65536).
+-define(DELAY,           2000).
+
+%%
+%% message hash function
+-define(HASH32(X),  erlang:crc32(X)).

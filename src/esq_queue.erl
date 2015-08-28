@@ -15,12 +15,15 @@
 %%   limitations under the License.
 %%
 %% @description
-%%    queue container process
+%%   queue container process
 -module(esq_queue).
 -behaviour(gen_server).
 
+-include("esq.hrl").
+
 -export([
-   start_link/3,
+   start_link/1,
+   start_link/2,
    init/1, 
    terminate/2,
    handle_call/3, 
@@ -29,36 +32,63 @@
    code_change/3
 ]).
 
+%%
 %% internal state
 -record(queue, {
-   % ioctl
-   capacity = inf  :: inf | integer(),
-   inbound  = inf  :: inf | integer(),
-   outbound = inf  :: inf | integer(),
-   ttl      = undefined :: any(),
-   t        = undefined :: any(),
+   q        = undefined :: datum:q()     %% in-memory message queue
+  ,qf       = undefined :: any()         %% overflow message queue 
+  ,inflight = undefined :: datum:heap()  %% in-flight message heap
+  ,capacity = undefined :: integer()     %% number of message to keep in-memory
 
-   ready    = undefined :: any(), %% queue ready capacity
-   sub      = undefined :: any(), %% subscribed processes
-
-   length   = 0         :: integer(), %% number of elements in queue
-   mod      = undefined :: atom(),
-   q        = undefined :: any()
+  ,ttf      = undefined :: any()         %% message visibility timeout, time to keep message in-flight queue
+  ,ttl      = undefined :: any()         %% message time-to-live
+  ,tts      = undefined :: any()         %% message time-to-spool
 }).
 
 %%
-%% start queue instance
-start_link(undefined, Mod, Opts) ->
-   gen_server:start_link(?MODULE, [undefined, Mod, Opts], []);
-start_link(Name, Mod, Opts) ->
-   gen_server:start_link({local, Name}, ?MODULE, [Name, Mod, Opts], []).
+%% empty queue
+-define(NULL,    {}).
 
-init([_Name, Mod, Opts]) ->
-   {ok, Len, Q} = Mod:init(Opts),
-   {ok, set_ioctl(Opts, #queue{mod = Mod, q = Q, length = Len, sub = gb_sets:new()})}.
+%%%----------------------------------------------------------------------------   
+%%%
+%%% factory
+%%%
+%%%----------------------------------------------------------------------------   
 
-terminate(Reason, #queue{mod=Mod}=S) ->
-   Mod:free(Reason, S#queue.q).
+%%
+%%
+start_link(Opts) ->
+   gen_server:start_link(?MODULE, [Opts], []).
+
+start_link(Name, Opts) ->
+   gen_server:start_link({local, Name}, ?MODULE, [Opts], []).
+
+%%
+%%
+init([Opts]) ->
+   {ok,
+      lists:foldl(
+         fun(X, Acc) -> ioctl(X, Acc) end, 
+         init(Opts, #queue{q = deq:new()}),
+         Opts
+      )
+   }. 
+
+init([{fspool, Path} | Opts], State) ->
+   init(Opts, State#queue{qf = esq_file:new(Path)});
+init([{tts, T} | Opts], State) ->
+   init(Opts, State#queue{tts = tempus:timer(T, sync)});
+init([_ | Opts], State) ->
+   init(Opts, State);
+init([], State) ->
+   State.
+
+%%
+%%
+terminate(_Reason, #queue{qf = undefined}) ->
+   ok;
+terminate(_Reason, #queue{qf = Overflow}) ->
+   esq_file:free(Overflow).
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -66,65 +96,62 @@ terminate(Reason, #queue{mod=Mod}=S) ->
 %%%
 %%%----------------------------------------------------------------------------   
 
+%%
+%%
+handle_call({enq, Msg}, _Tx, State0) ->
+   {Result, State1} = enq(Msg, uid:l(), deqf(State0)),
+   {reply, Result, State1}; 
+
+handle_call({deq,   N}, _Tx, State0) ->
+   {Queue, State1} = deq(N, deqf(ttl(State0))),
+   {reply, {ok, deq:list(Queue)}, State1};
 
 %%
-%% 
-handle_call(close, _Tx, State) ->
-   {stop, normal, ok, State};
-
-handle_call({enq, Pri, Msg}, _Tx, State0) ->
-   {Result, State} = enqueue(Pri, Msg, State0),
-   {reply, Result, State};
-
-handle_call({deq, Pri, N}, _Tx, State0) ->
-   {Result, State} = dequeue(Pri, N, State0),
-   {reply, Result, State};
-
-
 %%
-%% ioctl
-handle_call({ioctl, Req}, _Tx, S)
- when is_atom(Req) ->
-   {reply, get_ioctl(Req, S), S};
-
-handle_call({ioctl, {_, _}=Req}, _Tx, S) ->
-   try
-      {reply, ok, set_ioctl([Req], S)}
-   catch _:Reason ->
-      {reply, {error, Reason}, S}
+handle_call({ioctl, Req}, _Tx, State0) ->
+   case ioctl(Req, State0) of
+      #queue{} = State1 ->
+         {reply, ok, State1};
+      Result ->
+         {reply, Result, State0}
    end;
+  
+handle_call(_Req, _Tx, State) ->
+   {noreply, State}.
 
-handle_call({ioctl, Req}, _Tx, S)
- when is_list(Req) ->
-   try
-      {reply, ok, set_ioctl(Req, S)}
-   catch _:Reason ->
-      {reply, {error, Reason}, S}
-   end;
 
-handle_call(_Req, _Tx, S) ->
-   {noreply, S}.
-   
 %%
-%% enqueue message
-handle_cast({enq, Pri, Msg}, State0) ->
-   {_, State} = enqueue(Pri, Msg, State0),
+%%
+handle_cast({enq, Msg}, State0) ->
+   {_, State1} = enq(Msg, uid:l(), deqf(State0)),
+   {noreply, State1}; 
+
+handle_cast(close, State) ->
+   {stop, normal, State};
+
+handle_cast({ack, Uid}, State) ->
+   {noreply, ack(Uid, State)};
+
+handle_cast(_Req, State) ->
+   {noreply, State}.
+
+
+%%
+%%
+handle_info(sync, #queue{qf = undefined} = State) ->
    {noreply, State};
 
-handle_cast(_Req, S) ->
-   {noreply, S}.
+handle_info(sync, #queue{tts = T, qf = File} = State) ->
+   {noreply, State#queue{tts = tempus:reset(T, sync), qf = esq_file:sync(File)}};
 
-handle_info(ttl, State0) ->
-   State = evict(State0),
-   {noreply, State#queue{ttl = tempus:timer(State#queue.ttl, ttl)}};
+handle_info(_Req, State) ->
+   {noreply, State}.
 
-handle_info(_Msg, S) ->
-   {noreply, S}.
 
 %%
 %% 
-code_change(_Vsn, S, _Extra) ->
-   {ok, S}.
+code_change(_Vsn, State, _Extra) ->
+   {ok, State}.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -133,166 +160,123 @@ code_change(_Vsn, S, _Extra) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% plus, minus math with infinity
-sub(inf, _) -> inf;
-sub(X,   Y) -> X - Y.
+%% enqueue message 
+enq(Msg, Uid, #queue{q = Queue, qf = undefined, capacity = C} = State) ->
+   case deq:length(Queue) of
+      X when X >= C ->
+         {{error, ebusy}, State};
+      _ ->
+         {ok, State#queue{q = deq:enq({Uid, Msg}, Queue)}}
+   end;
 
-add(inf, _) -> inf;
-add(X,   Y) -> X + Y.
+enq(Msg, Uid, #queue{q = Queue, qf = Overflow, capacity = C} = State) ->
+   case {esq_file:length(Overflow), deq:length(Queue)} of
+      {X, _} when X =/= 0 ->
+         {ok, State#queue{qf = esq_file:enq({Uid, Msg}, Overflow)}};
+
+      {0, X} when X >=  C ->
+         {ok, State#queue{qf = esq_file:enq({Uid, Msg}, Overflow)}};
+
+      _ ->
+         {ok, State#queue{q = deq:enq({Uid, Msg}, Queue)}}
+   end.
 
 %%
-%% set / get queue ioctrls
-set_ioctl([{capacity, X} | Opts], S) ->
-   set_ioctl(Opts, S#queue{capacity=X});
-set_ioctl([{inbound,  X} | Opts], S) ->
-   set_ioctl(Opts, S#queue{inbound=X});
-set_ioctl([{outbound, X} | Opts], S) ->
-   set_ioctl(Opts, S#queue{outbound=X});
-set_ioctl([{ttl, undefined} | Opts], #queue{ttl=undefined}=S) ->
-   set_ioctl(Opts, S);
-set_ioctl([{ttl,      X} | Opts], #queue{ttl=undefined}=S) ->
-   set_ioctl(Opts, S#queue{ttl=tempus:timer(tempus:t(s, X), ttl), t=X});
-set_ioctl([{ttl, undefined} | Opts], S) ->
-   _ = tempus:cancel(S#queue.ttl),
-   set_ioctl(Opts, S#queue{ttl=undefined});
-set_ioctl([{ttl,      X} | Opts], S) ->
-   _ = tempus:cancel(S#queue.ttl),
-   set_ioctl(Opts, S#queue{ttl=tempus:timer(tempus:t(s, X), ttl), t=X});
-% set_ioctl([{ttl,      X} | Opts], S) ->
-%    set_ioctl(Opts, S#queue{ttl=X});
-set_ioctl([{ready,    X} | Opts], S) ->
-   set_ioctl(Opts, S#queue{ready=X});
-set_ioctl([{sub,      X} | Opts], #queue{ready=R}=S)
- when is_integer(R) ->
-   set_ioctl(Opts, pubsub(S#queue{sub=gb_sets:add(X, S#queue.sub)}));   
-set_ioctl([_ | Opts], S) ->
-   set_ioctl(Opts, S);
-set_ioctl([], S) ->
-   S.
+%% dequeue message
+deq(N, #queue{q = Queue, qf = undefined} = State) ->
+   case deq:length(Queue) of
+      0 ->
+         {Queue, State};
+      _ ->
+         {Head, Tail} = deq:split(N, Queue),
+         enqf(Head, State#queue{q = Tail})
+   end;
 
-get_ioctl(capacity, S) ->
-   S#queue.capacity;
-get_ioctl(length, S) ->
-   S#queue.length;
-get_ioctl(inbound, S) ->
-   S#queue.inbound;
-get_ioctl(outbound, S) ->
-   S#queue.outbound;
-get_ioctl(_, _) ->
+deq(N, #queue{q = Queue, qf = Overflow, capacity = C} = State) ->
+   case deq:length(Queue) of
+      0 ->
+         {Chunk, File} = esq_file:deq(N + C, Overflow),
+         {Head,  Tail} = deq:split(N, Chunk),
+         enqf(Head, State#queue{q = Tail, qf = File});
+
+      _ ->
+         {Head, Tail} = deq:split(N, Queue),
+         enqf(Head, State#queue{q = Tail})
+   end.
+
+%%
+%% acknowledge message
+ack(_Uid, #queue{inflight = undefined}=State) ->
+   State;
+
+ack(Uid, #queue{inflight = Heap0} = State) ->
+   Heap1 = heap:dropwhile(fun(X) -> X =< Uid end, Heap0),
+   State#queue{inflight = Heap1}.
+
+
+%%
+%% enqueue message to in-flight queue
+enqf(Queue, #queue{inflight = undefined} = State) ->
+   {Queue, State};
+
+enqf(Queue, State) ->
+   enqf(Queue, deq:new(), State).
+
+enqf(?NULL, Acc, State) ->
+   {Acc, State};
+
+enqf(Queue, Acc, #queue{inflight = Heap0} = State) ->
+   Uid      = uid:l(),
+   {_, Msg} = deq:head(Queue),
+   Heap1    = heap:insert(Uid, Msg, Heap0), 
+   enqf(deq:tail(Queue), deq:enq({Uid, Msg}, Acc), State#queue{inflight = Heap1}).
+
+%%
+%% dequeue expired message from in-flight queue to head of message queue
+deqf(#queue{inflight = undefined} = State) ->
+   State;
+
+deqf(#queue{q = Queue0, inflight = Heap, ttf = TTF} = State) ->
+   Uid = uid:l(), 
+   {Head, Tail} = heap:splitwith(fun(X) -> uid:t( uid:d(Uid, X) ) > TTF end, Heap),
+   Queue1 = lists:foldr(fun(X, Acc) -> deq:poke(X, Acc) end, Queue0, heap:list(Head)),
+   State#queue{q = Queue1, inflight = Tail}.
+
+
+%%
+%% remove expired message
+ttl(#queue{ttl = undefined} = State) ->
+   State;
+
+ttl(#queue{ttl = TTL, q = Queue0} = State) ->
+   Uid = uid:l(), 
+   Queue1 = deq:dropwhile(fun({X, _}) -> uid:t( uid:d(Uid, X) ) > TTL end, Queue0),
+   State#queue{q = Queue1}.
+
+
+%%
+%%
+ioctl(ttl, #queue{ttl = X}) ->
+   X;
+ioctl({ttl, X}, State) ->
+   State#queue{ttl = X};
+
+ioctl(ttf, #queue{ttf = X}) ->
+   X;
+ioctl({ttf, undefined}, State) ->
+   State#queue{ttf = undefined, inflight = undefined};
+ioctl({ttf, X}, #queue{inflight = undefined} = State) ->
+   State#queue{ttf = X, inflight = heap:new()};
+ioctl({ttf, X}, State) ->
+   State#queue{ttf = X};
+
+ioctl(capacity, #queue{capacity = X}) ->
+   X;
+ioctl({capacity, X}, State) ->
+   State#queue{capacity = X};
+
+ioctl({_, _}, State) ->
+   State;
+ioctl(_,     _State) ->
    undefined.
-
-%%
-%% enqueue message(s)
-enqueue(Pri, Msg, State) ->
-   try
-      {ok, pubsub(enq(Pri, Msg, State))}
-   catch throw:Error ->
-      {Error, State}
-   end.
-
-%%
-%% dequeue message(s)
-dequeue(Pri, N, State) ->
-   try
-      deq(Pri, N, State)
-   catch throw:Error ->
-      {Error, State}
-   end.
-
-%%
-%%
-enq(_Pri, _Msg, #queue{inbound=X})
- when X =< 0 ->
-   %% inbound credits are consumer, queue waits for deq operation to increase credit 
-   throw({error, busy});
-
-enq(_Pri, _Msg, #queue{capacity=C, length=L})
- when C =/= inf, L >= C ->
-   %% queue is out of capacity
-   throw({error, busy});
-
-enq(Pri, Msg, State) ->
-   TTL = ttl(State#queue.t),
-   lists:foldl(
-      fun(X, Acc) -> enq_msg(TTL, Pri, X, Acc) end,
-      State,
-      Msg
-   ).
-
-%%
-%%
-deq(_Pri, _N, #queue{outbound=X})
- when X =< 0 ->
-   throw({error, busy});
-
-deq(Pri, N, State) ->
-   deq_msg(Pri, N, State).
-
-%%
-%%
-enq_msg(TTL, Pri, Msg, #queue{mod=Mod}=State) ->
-   case Mod:enq(TTL, Pri, Msg, State#queue.q) of
-      {ok, Queue} ->
-         State#queue{
-            length   = add(State#queue.length,   1),
-            inbound  = sub(State#queue.inbound,  1),
-            q        = Queue
-         };
-      Error   ->
-         throw(Error)
-   end.
-
-%%
-%%
-deq_msg(Pri, N, #queue{mod=Mod}=State) ->
-   case Mod:deq(Pri, N, State#queue.q) of
-      {ok, Msg, Q} ->
-         Len = length(Msg),
-         {Msg, 
-            State#queue{
-               length   = sub(State#queue.length,   Len),
-               outbound = sub(State#queue.outbound, Len),
-               q        = Q
-            }
-         };
-      Error ->
-         throw(Error)
-   end.
-
-%%
-%% notify subscribers
-pubsub(#queue{ready=R, length=L}=State)
- when is_integer(R), L >= R ->
-   % notify subscribed queues, messages are available
-   _ = gb_sets:fold(
-      fun(X, _) ->
-         erlang:send(X, {esq, self(), L})
-      end,
-      ok,
-      State#queue.sub
-   ),
-   State#queue{sub=gb_sets:new()};
-pubsub(State) ->
-   State.
-
-%%
-%% evict expired message
-evict(#queue{mod=Mod}=State) ->
-   case Mod:evict(os:timestamp(), State#queue.q) of
-      {ok, N, Queue} ->
-         State#queue{
-            length   = sub(State#queue.length,   N),
-            outbound = sub(State#queue.outbound, N),
-            q        = Queue
-         };
-      Error ->
-         throw(Error)
-   end.
-
-%%
-%% return ttl value
-ttl(undefined) ->
-   undefined;
-ttl(TTL) ->
-   tempus:add(os:timestamp(), TTL).
 
