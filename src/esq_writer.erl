@@ -95,8 +95,8 @@ close(#writer{fd = FD, file = File} = State) ->
 rename(File) ->
    Path = filename:dirname(File),
    Name = filename:basename(File, ?WRITER),
-   {uid, Uid} = uid:l(),
-   Ext = scalar:c(bits:btoh(Uid)),
+   {A, B, C}  = os:timestamp(),
+   Ext = scalar:c(bits:btoh(<<A:32,B:32,C:32>>)),
    file:rename(File, filename:join([Path, [Name, $., Ext]])).
 
 %%

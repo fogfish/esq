@@ -1,7 +1,7 @@
 {application, esq,
    [
       {description, "erlang simple queue"},
-      {vsn,         "0.9.0"},
+      {vsn,         "0.10.0"},
       {modules,     []},
       {registered,  []},
       {applications,[
@@ -9,7 +9,6 @@
         ,stdlib
         ,feta
         ,datum
-        ,uid
       ]},
       {mod, {esq_app, []}},
       {env, []}

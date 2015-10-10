@@ -89,7 +89,7 @@ free(#q{tail = Tail}) ->
 -spec(enq/2 :: (any(), #q{}) -> #q{}).
 
 enq(E, State) ->
-   Uid = uid:l(),
+   Uid = os:timestamp(),
    enq(E, Uid, deqf(Uid, ttl(Uid, sync(State)))).
 
 %% enqueue element to head or tail
@@ -116,7 +116,7 @@ deq(State) ->
    deq(1, State).
 
 deq(N, State) ->
-   Uid = uid:l(),
+   Uid = os:timestamp(),
    deq(N, Uid, deqf(Uid, ttl(Uid, sync(State)))).
 
 %%
@@ -144,7 +144,7 @@ deq(N, _Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
 
 %%
 %% acknowledge message
--spec(ack/2 :: (uid:l(), #q{}) -> #q{}).
+-spec(ack/2 :: (any(), #q{}) -> #q{}).
 
 ack(_Uid, #q{heap = undefined}=State) ->
    State;
@@ -167,7 +167,7 @@ deqf(_Uid, #q{heap = undefined} = State) ->
    State;
 
 deqf(Uid,  #q{head = Head0, heap = Heap, ttf = TTF} = State) ->
-   {Head, Tail} = heap:splitwith(fun(X) -> uid:t( uid:d(Uid, X) ) > TTF end, Heap),
+   {Head, Tail} = heap:splitwith(fun(X) -> (timer:now_diff(Uid, X) div 1000) > TTF end, Heap),
    Head1 = lists:foldr(fun(X, Acc) -> deq:poke(X, Acc) end, Head0, heap:list(Head)),
    State#q{head = Head1, heap = Tail}.
 
@@ -183,7 +183,7 @@ enqf({}, Acc, State) ->
    {deq:list(Acc), State};
 
 enqf(Queue, Acc, #q{heap = Heap0} = State) ->
-   Uid    = uid:l(),
+   Uid    = os:timestamp(),
    {_, E} = deq:head(Queue),
    Heap1  = heap:insert(Uid, E, Heap0), 
    enqf(deq:tail(Queue), deq:enq({Uid, E}, Acc), State#q{heap = Heap1}).
@@ -194,7 +194,7 @@ ttl(_Uid, #q{ttl = undefined} = State) ->
    State;
 
 ttl(Uid,  #q{head = Head0, ttl = TTL} = State) ->
-   Head1 = deq:dropwhile(fun({X, _}) -> uid:t( uid:d(Uid, X) ) > TTL end, Head0),
+   Head1 = deq:dropwhile(fun({X, _}) -> (timer:now_diff(Uid, X) div 1000) > TTL end, Head0),
    State#q{head = Head1}.
 
 %%
