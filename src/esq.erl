@@ -31,7 +31,7 @@
 
 %%
 %% start application
--spec(start/0 :: () -> ok).
+-spec start() -> ok.
 
 start() ->
    applib:boot(?MODULE, []).
@@ -48,7 +48,7 @@ start() ->
 %%                         time to update overflow queue, any overflow message remain invisible
 %%                         for read until spool segment is synced.
 %%    {fspool, string()} - path to spool
--spec(new/1 :: (list()) -> #q{}).
+-spec new(list()) -> #q{}.
 
 new(Opts) ->
    new(Opts, #q{head = deq:new()}).
@@ -77,7 +77,7 @@ new([], State) ->
 
 %%
 %% close queue and release all resources
--spec(free/1 :: (#q{}) -> ok).
+-spec free(#q{}) -> ok.
 
 free(#q{tail = undefined}) ->
    ok;
@@ -86,7 +86,7 @@ free(#q{tail = Tail}) ->
 
 %%
 %% enqueue message to queue, exit if file operation fails
--spec(enq/2 :: (any(), #q{}) -> #q{}).
+-spec enq(any(), #q{}) -> #q{}.
 
 enq(E, State) ->
    Uid = os:timestamp(),
@@ -109,8 +109,8 @@ enq(E, Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
 
 %%
 %% dequeue message from queue, exit if file operation fails
--spec(deq/1 :: (#q{}) -> {[any()], #q{}}).
--spec(deq/2 :: (integer(), #q{}) -> {[any()], #q{}}).
+-spec deq(#q{}) -> {[any()], #q{}}.
+-spec deq(integer(), #q{}) -> {[any()], #q{}}.
 
 deq(State) ->
    deq(1, State).
@@ -144,7 +144,7 @@ deq(N, _Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
 
 %%
 %% acknowledge message
--spec(ack/2 :: (any(), #q{}) -> #q{}).
+-spec ack(any(), #q{}) -> #q{}.
 
 ack(_Uid, #q{heap = undefined}=State) ->
    State;
@@ -208,3 +208,4 @@ sync(#q{tail = Tail, tte = T, tts = Ts}=State) ->
       _ ->
          State
    end.
+
