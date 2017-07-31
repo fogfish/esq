@@ -1,15 +1,7 @@
-*.*~
-*.log
-*.aux
 *.beam
 *.dump
 *.tag.gz
 *.tgz
-deps.config
-ebin/
-deps/
-tests/
-.eunit/
-rebar
-.rebar/
+rebar3
 *.sublime-*
+_build/
