@@ -1,4 +1,41 @@
-# Embeddable Simple Queue for Erlang
+# Embeddable Simple Queue
+
+The library implements persistent queue data structure for Erlang applications.
+
+
+
+## Inspiration
+
+Queuing is an essential features required to implement scalable and fault tolerant applications. Any asynchronous communication is build around queues. There are various queuing systems on the market RabbitMQ, AWS SQS, Kafka, etc. Each Erlang processes has in-memory queue -- mailbox. Sometimes, persistence of messages is required for robustness and reliability. The library implements embeddable queue (data structure) with message persistence that enhances traditional mailbox features of Erlang processes.
+
+
+
+## Key features
+
+
+
+
+## Getting started 
+
+
+### Installation
+
+
+### Usage
+
+
+
+
+## How to Contribute
+
+
+### Bugs
+
+
+## Changelog
+
+
+## License
 
 The library provides embeddable best-effort queue with persistence and in-flight capabilities.
 The head is kept in memory using dequeue data structure. It is capacity is limited to C message.
