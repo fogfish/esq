@@ -29,6 +29,7 @@
   ,ack/2
 ]).
 
+
 %%
 %% start application
 -spec start() -> ok.
@@ -86,14 +87,14 @@ free(#q{tail = Tail}) ->
 
 %%
 %% enqueue message to queue, exit if file operation fails
--spec enq(any(), #q{}) -> #q{}.
+-spec enq(_, #q{}) -> {uid:l(), #q{}}.
 
 enq(E, State) ->
    Uid = os:timestamp(),
    enq(E, Uid, deqf(Uid, ttl(Uid, sync(State)))).
 
 %% enqueue element to head or tail
-enq(E, Uid, #q{head = Head, tail = undefined} = State) ->
+enq(E, Uid, #q{head = Head, tail = undefined, capacity = undefined} = State) ->
    State#q{head = deq:enq({Uid, E}, Head)};
 
 enq(E, Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
@@ -109,8 +110,8 @@ enq(E, Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
 
 %%
 %% dequeue message from queue, exit if file operation fails
--spec deq(#q{}) -> {[any()], #q{}}.
--spec deq(integer(), #q{}) -> {[any()], #q{}}.
+-spec deq(#q{}) -> {[{uid:l(), _}], #q{}}.
+-spec deq(integer(), #q{}) -> {[{uid:l(), _}], #q{}}.
 
 deq(State) ->
    deq(1, State).
@@ -144,7 +145,7 @@ deq(N, _Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
 
 %%
 %% acknowledge message
--spec ack(any(), #q{}) -> #q{}.
+-spec ack(uid:l(), #q{}) -> #q{}.
 
 ack(_Uid, #q{heap = undefined}=State) ->
    State;

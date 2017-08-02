@@ -6,13 +6,42 @@ The library implements persistent queue data structure for Erlang applications.
 
 ## Inspiration
 
-Queuing is an essential features required to implement scalable and fault tolerant applications. Any asynchronous communication is build around queues. There are various queuing systems on the market RabbitMQ, AWS SQS, Kafka, etc. Each Erlang processes has in-memory queue -- mailbox. Sometimes, persistence of messages is required for robustness and reliability. The library implements embeddable queue (data structure) with message persistence that enhances traditional mailbox features of Erlang processes.
+Queuing is an essential features required to implement scalable and fault tolerant applications. Any asynchronous communication is build around queues. There are various queuing systems on the market RabbitMQ, Kafka, AWS SQS, AWS Kinesis, etc. Each Erlang process has in-memory queue -- mailbox. Sometimes, persistence of messages is required for robustness and reliability. The library implements embeddable queue (data structure) with message persistence that enhances traditional mailbox features of Erlang processes.
 
 
 
 ## Key features
 
+### Queue-compatible interface
 
+The library implements mutable (imperative) queue data structure. The data structure is a product of in-memory head and in-file persistent tail. The head is kept in memory using [dequeue](https://github.com/fogfish/datum/blob/master/src/queue/deq.erl) data structure. It is capacity is limited to `C` messages.
+The head overflow causes swap to disk. The [disk queue](src/esq_file.erl) is built as chain of files (64MB each segment). The queue rotates file segment when head is fully consumed by application.
+
+Let's take a short touch to the queue interface
+```erlang
+```
+
+### Message persistency
+
+Using sequential disk I/O technique. 
+
+```
+         head             tail                                
+         +----------+     +---+   +---+       +---+            
+deq <----+    C     <-----+ q |   | q |  ...  | q <-------+ enq
+         +----------+     +---+   +---+       +---+            
+                             ro      ro          wr        
+```
+
+
+### In-flight capabilities
+
+The queue also maintain in-flight heap that temporary keeps dequeued messages. Clients shall acknowledge message otherwise messages are moved to head of queue again. 
+
+### Known limitations
+
+* the library provides embeddable best-effort queue
+* the crash of VM might cause loss of data: queue head is in-memory data structure and file segment writer uses delayed write.
 
 
 ## Getting started 

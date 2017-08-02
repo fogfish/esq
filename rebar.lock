@@ -5,4 +5,8 @@
  {<<"feta">>,
   {git,"https://github.com/fogfish/feta",
        {ref,"1cb1b41ba4bd4bbec3abc2c2583b78912683b93b"}},
+  0},
+ {<<"uid">>,
+  {git,"https://github.com/fogfish/uid",
+       {ref,"2772689999567931226aae7a55d9a2b5f70a457c"}},
   0}].
