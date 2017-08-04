@@ -5,3 +5,4 @@
 rebar3
 *.sublime-*
 _build/
+tests/

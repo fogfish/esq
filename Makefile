@@ -29,7 +29,7 @@ LATEST ?= latest
 REBAR  ?= 3.3.2
 
 ## root path to benchmark framework
-BB     = ../basho_bench
+BB     = ../../dev/basho_bench
 SSHENV = /tmp/ssh-agent.conf
 COOKIE?= nocookie
 

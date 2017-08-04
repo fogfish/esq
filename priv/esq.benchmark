@@ -1,8 +1,8 @@
 {code_paths, [
-   "./ebin"
-  ,"./deps/feta"
-  ,"./deps/datum"
-  ,"./deps/uid"
+   "./_build/default/lib/esq"
+  ,"./_build/default/lib/feta"
+  ,"./_build/default/lib/datum"
+  ,"./_build/default/lib/uid"
 ]}.
 {log_level,       info}.
 {report_interval, 1}.
@@ -18,14 +18,13 @@
 {value_generator, {fixed_bin,   1024}}.
 
 {operations, [
-   {enq,     1},
-   {deq,     1} 
+   {enq,     75},
+   {deq,     25} 
 ]}.
 
 %%
 %% test queue 
 {queue,  [
-  %  {capacity,  1000}
-  % ,{fspool,    "/tmp/b"}
-  % ,{tts,       5000}
+	{capacity,  1000}
+   ,{tts,       1000}
 ]}.

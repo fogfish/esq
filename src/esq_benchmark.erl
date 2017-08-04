@@ -52,12 +52,5 @@ run(deq, _KeyGen, _ValGen, Queue0) ->
 
 init(Id) ->
    Config = basho_bench_config:get(queue, []),
-   case lists:keytake(fspool, 1, Config) of
-      false ->
-         esq:new(Config);
-      {value, {fspool, Root}, Tail} ->
-         Path = filename:join([Root, scalar:c(Id)]),
-         esq:new([{fspool, Path}| Tail])
-   end.
-
-
+   Path = filename:join(["/tmp/esq/", scalar:c(Id)]),
+   esq:new(Path, Config).

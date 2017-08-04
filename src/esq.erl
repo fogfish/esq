@@ -18,10 +18,12 @@
 %%   erlang simple queue
 -module(esq).
 -include("esq.hrl").
+-compile({no_auto_import,[element/2]}).
 
 -export([start/0]).
 -export([
    new/1
+  ,new/2
   ,free/1
   ,enq/2
   ,deq/1
@@ -29,6 +31,10 @@
   ,ack/2
 ]).
 
+%%
+%% data types
+-type payload() :: _.
+-type element() :: #{receipt => uid:l(), payload => payload()}.
 
 %%
 %% start application
@@ -48,89 +54,73 @@ start() ->
 %%    {tts,   integer()} - message time-to-sync in milliseconds,
 %%                         time to update overflow queue, any overflow message remain invisible
 %%                         for read until spool segment is synced.
-%%    {fspool, string()} - path to spool
+%%    {capacity, integer()} - size of the head
 -spec new(list()) -> #q{}.
 
-new(Opts) ->
-   new(Opts, #q{head = deq:new()}).
+new(Path) ->
+   new(Path, []).
 
-new([{ttl, X} | Opts], State) ->
-   new(Opts, State#q{ttl = X});
+new(Path, Opts) ->
+   config(Opts, 
+      #q{
+         head     = deq:new(),
+         tail     = esq_file:new(Path),
+         capacity = 1,
+         tts      = 1000
+      }
+   ).
 
-new([{ttf, X} | Opts], State) ->
-   new(Opts, State#q{ttf = X, heap = heap:new()});
+config([{ttl, X} | Opts], State) ->
+   config(Opts, State#q{ttl = X});
 
-new([{tts, X} | Opts], State) ->
-   T = X div 1000,
-   new(Opts, State#q{tts = T, tte = tempus:add(os:timestamp(), T)});
+config([{ttf, X} | Opts], State) ->
+   config(Opts, State#q{ttf = X, heap = heap:new()});
 
-new([{capacity, X} | Opts], State) ->
-   new(Opts, State#q{capacity = X});
+config([{tts, X} | Opts], State) ->
+   config(Opts, State#q{tts = X, tte = tempus:add(os:timestamp(), tempus:t(m, X))});
 
-new([{fspool, Path} | Opts], State) ->
-   new(Opts, State#q{tail = esq_file:new(Path)});
+config([{capacity, X} | Opts], State) ->
+   config(Opts, State#q{capacity = X});
 
-new([_ | Opts], State) ->
-   new(Opts, State);
+config([_ | Opts], State) ->
+   config(Opts, State);
 
-new([], State) ->
+config([], State) ->
    State.
 
 %%
 %% close queue and release all resources
 -spec free(#q{}) -> ok.
 
-free(#q{tail = undefined}) ->
-   ok;
 free(#q{tail = Tail}) ->
    esq_file:free(Tail).
 
 %%
 %% enqueue message to queue, exit if file operation fails
--spec enq(_, #q{}) -> {uid:l(), #q{}}.
+-spec enq(payload(), #q{}) -> #q{}.
 
 enq(E, State) ->
-   Uid = os:timestamp(),
-   enq(E, Uid, deqf(Uid, ttl(Uid, sync(State)))).
+   Uid = uid:encode(uid:l()),
+   enq_(element(Uid, E), deqf(Uid, ttl(Uid, sync(State)))).
 
-%% enqueue element to head or tail
-enq(E, Uid, #q{head = Head, tail = undefined, capacity = undefined} = State) ->
-   State#q{head = deq:enq({Uid, E}, Head)};
-
-enq(E, Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
-   case {esq_file:length(Tail), deq:length(Head)} of
-      {X, _} when X =/= 0 ->
-         State#q{tail = esq_file:enq({Uid, E}, Tail)};
-      {0, X} when X >=  C ->
-         State#q{tail = esq_file:enq({Uid, E}, Tail)};
-      _ ->
-         State#q{head = deq:enq({Uid, E}, Head)}
-   end.
+enq_(E, #q{tail = Tail} = State) ->
+   State#q{tail = esq_file:enq(E, Tail)}.
 
 
 %%
 %% dequeue message from queue, exit if file operation fails
--spec deq(#q{}) -> {[{uid:l(), _}], #q{}}.
--spec deq(integer(), #q{}) -> {[{uid:l(), _}], #q{}}.
+-spec deq(#q{}) -> {[element()], #q{}}.
+-spec deq(integer(), #q{}) -> {[element()], #q{}}.
 
 deq(State) ->
    deq(1, State).
 
 deq(N, State) ->
-   Uid = os:timestamp(),
+   Uid = uid:encode(uid:l()),
    deq(N, Uid, deqf(Uid, ttl(Uid, sync(State)))).
 
 %%
 %% dequeue message
-deq(N, _Uid, #q{head = Head, tail = undefined} = State) ->
-   case deq:length(Head) of
-      0 ->
-         {[], State};
-      _ ->
-         {H, T} = deq:split(N, Head),
-         enqf(H, State#q{head = T})
-   end;
-
 deq(N, _Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
    case deq:length(Head) of
       0 ->
@@ -163,13 +153,21 @@ ack(Uid,  #q{heap = Heap0} = State) ->
 %%%----------------------------------------------------------------------------   
 
 %%
+%%
+element(Uid, E) ->
+   #{receipt => Uid, payload => E}.
+
+element({Uid, E}) ->
+   element(Uid, E).
+
+%%
 %% dequeue expired in-flight message to head
 deqf(_Uid, #q{heap = undefined} = State) ->
    State;
 
 deqf(Uid,  #q{head = Head0, heap = Heap, ttf = TTF} = State) ->
-   {Head, Tail} = heap:splitwith(fun(X) -> (timer:now_diff(Uid, X) div 1000) > TTF end, Heap),
-   Head1 = lists:foldr(fun(X, Acc) -> deq:poke(X, Acc) end, Head0, heap:list(Head)),
+   {Head, Tail} = heap:splitwith(fun(X) -> diff(Uid, X) > TTF end, Heap),
+   Head1 = lists:foldr(fun(X, Acc) -> deq:poke(element(X), Acc) end, Head0, heap:list(Head)),
    State#q{head = Head1, heap = Tail}.
 
 %%
@@ -184,10 +182,10 @@ enqf({}, Acc, State) ->
    {deq:list(Acc), State};
 
 enqf(Queue, Acc, #q{heap = Heap0} = State) ->
-   Uid    = os:timestamp(),
-   {_, E} = deq:head(Queue),
-   Heap1  = heap:insert(Uid, E, Heap0), 
-   enqf(deq:tail(Queue), deq:enq({Uid, E}, Acc), State#q{heap = Heap1}).
+   Uid   = uid:encode(uid:l()),
+   #{payload := E} = deq:head(Queue),
+   Heap1 = heap:insert(Uid, E, Heap0), 
+   enqf(deq:tail(Queue), deq:enq(element(Uid, E), Acc), State#q{heap = Heap1}).
 
 %%
 %% remove expired message
@@ -195,18 +193,24 @@ ttl(_Uid, #q{ttl = undefined} = State) ->
    State;
 
 ttl(Uid,  #q{head = Head0, ttl = TTL} = State) ->
-   Head1 = deq:dropwhile(fun({X, _}) -> (timer:now_diff(Uid, X) div 1000) > TTL end, Head0),
+   Head1 = deq:dropwhile(fun(#{receipt := X}) -> diff(Uid, X) > TTL end, Head0),
    State#q{head = Head1}.
 
 %%
 %% sync file queue
-sync(#q{tail = undefined} = State) ->
-   State;
-sync(#q{tail = Tail, tte = T, tts = Ts}=State) ->
+sync(#q{tail = Tail, tte = Expire, tts = T}=State) ->
    case os:timestamp() of
-      X when X > T ->
-         State#q{tail = esq_file:sync(Tail), tte = tempus:add(os:timestamp(), Ts)};
+      X when X > Expire ->
+         State#q{
+            tail = esq_file:sync(Tail),
+            tte  = tempus:add(os:timestamp(), tempus:t(m, T))
+         };
       _ ->
          State
    end.
+
+%%
+%%
+diff(A, B) ->
+   uid:t(uid:d(uid:decode(A), uid:decode(B))).
 
