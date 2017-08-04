@@ -2,7 +2,7 @@
 
 The library implements persistent queue data structure for Erlang applications.
 
-
+[![Build Status](https://secure.travis-ci.org/fogfish/esq.svg?branch=master)](http://travis-ci.org/fogfish/esq) [![Coverage Status](https://coveralls.io/repos/github/fogfish/esq/badge.svg?branch=master)](https://coveralls.io/github/fogfish/esq?branch=master)
 
 ## Inspiration
 
