@@ -29,6 +29,7 @@
   ,deq/1
   ,deq/2
   ,ack/2
+  ,head/1
 ]).
 
 %%
@@ -144,6 +145,13 @@ ack(Uid,  #q{heap = Heap0} = State) ->
    Heap1 = heap:dropwhile(fun(X) -> X =< Uid end, Heap0),
    State#q{heap = Heap1}.
 
+%%
+%%
+head(#q{head = {}}) ->
+   undefined;
+
+head(#q{head = Queue}) ->
+   deq:head(Queue).
 
 
 %%%----------------------------------------------------------------------------   
