@@ -36,6 +36,7 @@
 %% data types
 -type payload() :: _.
 -type element() :: #{receipt => uid:l(), payload => payload()}.
+-type queue()   :: pid(). 
 
 %%
 %% start application
@@ -56,169 +57,55 @@ start() ->
 %%                         time to update overflow queue, any overflow message remain invisible
 %%                         for read until spool segment is synced.
 %%    {capacity, integer()} - size of the head
--spec new(list()) -> #q{}.
+-spec new(list()) -> {ok, queue()}.
 
 new(Path) ->
    new(Path, []).
 
 new(Path, Opts) ->
-   config(Opts, 
-      #q{
-         head     = deq:new(),
-         tail     = esq_file:new(Path),
-         capacity = 1,
-         tts      = 1000
-      }
-   ).
+   esq_queue:start_link(Path, Opts).
 
-config([{ttl, X} | Opts], State) ->
-   config(Opts, State#q{ttl = X});
-
-config([{ttf, X} | Opts], State) ->
-   config(Opts, State#q{ttf = X, heap = heap:new()});
-
-config([{tts, X} | Opts], State) ->
-   config(Opts, State#q{tts = X, tte = tempus:add(os:timestamp(), tempus:t(m, X))});
-
-config([{capacity, X} | Opts], State) ->
-   config(Opts, State#q{capacity = X});
-
-config([_ | Opts], State) ->
-   config(Opts, State);
-
-config([], State) ->
-   State.
 
 %%
 %% close queue and release all resources
--spec free(#q{}) -> ok.
+-spec free(queue()) -> ok.
 
-free(#q{tail = Tail}) ->
-   esq_file:free(Tail).
+free(Queue) ->
+   pipe:free(Queue).
+
 
 %%
 %% enqueue message to queue, exit if file operation fails
--spec enq(payload(), #q{}) -> #q{}.
+-spec enq(payload(), queue()) -> ok.
 
-enq(E, State) ->
-   Uid = uid:encode(uid:l()),
-   enq_(element(Uid, E), deqf(Uid, ttl(Uid, sync(State)))).
-
-enq_(E, #q{tail = Tail} = State) ->
-   State#q{tail = esq_file:enq(E, Tail)}.
+enq(E, Queue) ->
+   pipe:call(Queue, {enq, E}, infinity).
 
 
 %%
 %% dequeue message from queue, exit if file operation fails
--spec deq(#q{}) -> {[element()], #q{}}.
--spec deq(integer(), #q{}) -> {[element()], #q{}}.
+-spec deq(queue()) -> [element()].
+-spec deq(integer(), queue()) -> [element()].
 
-deq(State) ->
-   deq(1, State).
+deq(Queue) ->
+   deq(1, Queue).
 
-deq(N, State) ->
-   Uid = uid:encode(uid:l()),
-   deq(N, Uid, deqf(Uid, ttl(Uid, sync(State)))).
+deq(N, Queue) ->
+   pipe:call(Queue, {deq, N}, infinity).
 
-%%
-%% dequeue message
-deq(N, _Uid, #q{head = Head, tail = Tail, capacity = C} = State) ->
-   case deq:length(Head) of
-      0 ->
-         {Chunk, File} = esq_file:deq(N + C, Tail),
-         {H, T} = deq:split(N, Chunk),
-         enqf(H, State#q{head = T, tail = File});
-
-      _ ->
-         {H, T} = deq:split(N, Head),
-         enqf(H, State#q{head = T})
-   end.
 
 %%
 %% acknowledge message
--spec ack(uid:l(), #q{}) -> #q{}.
+-spec ack(uid:l(), queue()) -> ok.
 
-ack(_Uid, #q{heap = undefined}=State) ->
-   State;
+ack(Uid, Queue) ->
+   pipe:call(Queue, {ack, Uid}, infinity).
 
-ack(Uid,  #q{heap = Heap0} = State) ->
-   Heap1 = heap:dropwhile(fun(X) -> X =< Uid end, Heap0),
-   State#q{heap = Heap1}.
 
 %%
 %%
-head(#q{head = {}}) ->
-   undefined;
+-spec head(queue()) -> element() | undefined.
 
-head(#q{head = Queue}) ->
-   deq:head(Queue).
-
-
-%%%----------------------------------------------------------------------------   
-%%%
-%%% private
-%%%
-%%%----------------------------------------------------------------------------   
-
-%%
-%%
-element(Uid, E) ->
-   #{receipt => Uid, payload => E}.
-
-element({Uid, E}) ->
-   element(Uid, E).
-
-%%
-%% dequeue expired in-flight message to head
-deqf(_Uid, #q{heap = undefined} = State) ->
-   State;
-
-deqf(Uid,  #q{head = Head0, heap = Heap, ttf = TTF} = State) ->
-   {Head, Tail} = heap:splitwith(fun(X) -> diff(Uid, X) > TTF end, Heap),
-   Head1 = lists:foldr(fun(X, Acc) -> deq:poke(element(X), Acc) end, Head0, heap:list(Head)),
-   State#q{head = Head1, heap = Tail}.
-
-%%
-%% enqueue message to in-flight queue
-enqf(Queue, #q{heap = undefined} = State) ->
-   {deq:list(Queue), State};
-
-enqf(Queue, State) ->
-   enqf(Queue, deq:new(), State).
-
-enqf({}, Acc, State) ->
-   {deq:list(Acc), State};
-
-enqf(Queue, Acc, #q{heap = Heap0} = State) ->
-   Uid   = uid:encode(uid:l()),
-   #{payload := E} = deq:head(Queue),
-   Heap1 = heap:insert(Uid, E, Heap0), 
-   enqf(deq:tail(Queue), deq:enq(element(Uid, E), Acc), State#q{heap = Heap1}).
-
-%%
-%% remove expired message
-ttl(_Uid, #q{ttl = undefined} = State) ->
-   State;
-
-ttl(Uid,  #q{head = Head0, ttl = TTL} = State) ->
-   Head1 = deq:dropwhile(fun(#{receipt := X}) -> diff(Uid, X) > TTL end, Head0),
-   State#q{head = Head1}.
-
-%%
-%% sync file queue
-sync(#q{tail = Tail, tte = Expire, tts = T}=State) ->
-   case os:timestamp() of
-      X when X > Expire ->
-         State#q{
-            tail = esq_file:sync(Tail),
-            tte  = tempus:add(os:timestamp(), tempus:t(m, T))
-         };
-      _ ->
-         State
-   end.
-
-%%
-%%
-diff(A, B) ->
-   uid:t(uid:d(uid:decode(A), uid:decode(B))).
-
+head(Queue) ->
+   pipe:call(Queue, head, infinity).
+   

@@ -35,7 +35,7 @@
 -record(q, {
    head     = undefined :: datum:q()     %% in-memory queue head
   ,tail     = undefined :: any()         %% on-disk overflow queue tail
-  ,heap     = undefined :: datum:heap()  %% in-flight heap
+  ,inflight = undefined :: datum:heap()  %% in-flight heap
 
   ,capacity = undefined :: integer()     %% number of message to keep in-memory
   ,ttf      = undefined :: any()         %% message visibility timeout, time to keep message in-flight queue

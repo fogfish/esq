@@ -80,39 +80,39 @@ end_per_group(_, _Config) ->
 %%%----------------------------------------------------------------------------   
 
 enq(_Config) ->
-   Q0 = esq:new("/tmp/q/enq"),
-   Q1 = esq:enq(a, Q0),
-   ok = esq:free(Q1),
+   {ok, Q} = esq:new("/tmp/q/enq"),
+   ok = esq:enq(a, Q),
+   ok = esq:free(Q),
 
    true = filelib:is_dir("/tmp/q/enq").
 
 deq(_Config) ->
-   Q0 = esq:new("/tmp/q/deq", [{tts, 1}]),
-   Q1 = esq:enq(a, Q0),
+   {ok, Q} = esq:new("/tmp/q/deq", [{tts, 1}]),
+   ok = esq:enq(a, Q),
    timer:sleep(1),
-   {[#{payload := a}], Q2} = esq:deq(Q1),
-   ok = esq:free(Q2).
+   [#{payload := a}] = esq:deq(Q),
+   ok = esq:free(Q).
 
 persistence(_Config) ->
-   A0 = esq:new("/tmp/q/persistence"),
-   A1 = esq:enq(a, A0),
-   ok = esq:free(A1),
+   {ok, A} = esq:new("/tmp/q/persistence"),
+   ok = esq:enq(a, A),
+   ok = esq:free(A),
 
-   B0 = esq:new("/tmp/q/persistence"),
-   {[#{payload := a}], B1} = esq:deq(B0),
-   ok = esq:free(B1).
+   {ok, B} = esq:new("/tmp/q/persistence"),
+   [#{payload := a}] = esq:deq(B),
+   ok = esq:free(B).
 
 inflight(_Config) ->
-   Q0 = esq:new("/tmp/q/inflight", [{tts, 1}, {ttf, 10}]),
-   Q1 = lists:foldl(fun esq:enq/2, Q0, [a, b, c, d]),
+   {ok, Q} = esq:new("/tmp/q/inflight", [{tts, 1}, {ttf, 10}]),
+   [esq:enq(X, Q) || X <- [a, b, c, d]],
    timer:sleep(1),
-   {[#{payload := a, receipt := A}], Q2} = esq:deq(Q1),
-   Q3 = esq:ack(A, Q2),
+   [#{payload := a, receipt := A}] = esq:deq(Q),
+   ok = esq:ack(A, Q),
 
    timer:sleep(15),
-   {[#{payload := b}], Q4} = esq:deq(Q3),
+   [#{payload := b}] = esq:deq(Q),
    timer:sleep(15),
-   {[#{payload := b}], Q5} = esq:deq(Q4),
-   ok = esq:free(Q5).
+   [#{payload := b}] = esq:deq(Q),
+   ok = esq:free(Q).
 
 

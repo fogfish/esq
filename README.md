@@ -45,25 +45,26 @@ Let's take a short tour to the queue interface
 ```erlang
 %%
 %% create an empty queue data structure
-Q0 = esq:new("/tmp/q").
+{ok, Q} = esq:new("/tmp/q").
 
 %%
 %% enqueue the message to queue, it returns a new copy of the queue.
-Q1 = esq:enq(a, Q0).
+ok = esq:enq(a, Q).
 
 %%
 %% enqueue multiple messages to queue
-Q2 = lists:foldl(fun esq:enq/2, Q1, [a, b, c, d]).
+[esq:enq(X, Q) || X <- [b, c, d, e]].
+
 
 %%
 %% dequeue message(s) from queue, it returns a list of elements
 %% each element is the map #{payload => payload()} that carries payload 
 %% and other message properties
-{[#{payload := a}], Q3} = esq:deq(Q2).
+[#{payload := a}] = esq:deq(Q).
 
 %%
 %% dequeue multiple messages from queue
-{_, Q4} = esq:deq(4, Q3).
+_ = esq:deq(4, Q).
 
 ```
 
@@ -87,7 +88,7 @@ Queue starts to "swap" to file segments only when enqueue rate causes an overflo
 
 ### In-flight capabilities
 
-A message is in-flight after it's dequeue from a queue by a consumer, but not yet acknowledged. There is no guarantee in distributed system that the consumer receive and process message. Thus, the consumer must explicitly acknowledge message using its receipt identity.
+A message is in-flight after it's dequeue from a queue by a consumer, but not yet acknowledged. There is no guarantee in distributed system that the consumer receive and process message. Thus, the consumer must explicitly acknowledge message using its receipt identity. 
 
 ```
          head             tail                                
@@ -107,28 +108,28 @@ Let's evaluate the in-flight feature.
 ```erlang
 %%
 %% create a queue and enable in-flight feature using time-to-flight (ttf)
-Q0 = esq:new("/tmp/q", [{capacity, 10}, {ttf, 5000}]).
+{ok, Q} = esq:new("/tmp/q", [{capacity, 10}, {ttf, 5000}]).
 
 %%
 %% enqueue multiple messages to queue
-Q1 = lists:foldl(fun esq:enq/2, Q0, [a, b, c, d, e, f, g, h]).
+[esq:enq(X, Q) || X <- [a, b, c, d, e, f, g, h]].
 
 %%
 %% dequeue message and read it's receipt
-{[#{receipt := Receipt}], Q2} = esq:deq(Q1).
+[#{receipt := Receipt}] = esq:deq(Q).
 
 %%
 %% acknowledge the message to queue
-Q3 = esq:ack(Receipt, Q2).
+esq:ack(Receipt, Q).
 
 %%
 %% message becomes visible to consumer again if acknowledgement is not
 %% delivered with-in time-to-flight
-{[#{payload := X}], Q4} = esq:deq(Q3).
+[#{payload := X}] = esq:deq(Q).
 
 timer:sleep(6000).
 
-{[#{payload := X}], Q5} = esq:deq(Q4).
+[#{payload := X}] = esq:deq(Q).
 ```
 
 ### Queue timers

@@ -22,7 +22,8 @@
    new/1,
    t/0,
    enq/2,
-   deq/2
+   deq/2,
+   ack/2
 ]).
 
 -record(inflight, {
@@ -55,6 +56,12 @@ enq(E, #inflight{q = Queue0} = InFlight) ->
 deq(Uid, #inflight{ttf = TTF, q = Queue0} = InFlight) ->
    {Head, Queue1} = heap:splitwith(fun(X) -> diff(Uid, X) > TTF end, Queue0),
    {heap:list(Head), InFlight#inflight{q = Queue1}}.
+
+%%
+%%
+ack(Uid, #inflight{q = Queue0} = InFlight) ->
+   Queue1 = heap:dropwhile(fun(X) -> X =< Uid end, Queue0),
+   InFlight#inflight{q = Queue1}.
 
 %%
 %%
