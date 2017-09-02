@@ -79,6 +79,10 @@ handle(head, Pipe, State0) ->
    pipe:ack(Pipe, Head),
    {next_state, handle, State1};
 
+handle(free, Pipe, State) ->
+   pipe:ack(Pipe, ok),
+   {stop, normal, State};
+
 handle(_, _, State) ->
    {next_state, handle, State}.
 

@@ -71,7 +71,7 @@ new(Path, Opts) ->
 -spec free(queue()) -> ok.
 
 free(Queue) ->
-   pipe:free(Queue).
+   pipe:call(Queue, free).
 
 
 %%
