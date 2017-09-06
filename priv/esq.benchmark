@@ -3,6 +3,7 @@
   ,"./_build/default/lib/feta"
   ,"./_build/default/lib/datum"
   ,"./_build/default/lib/uid"
+  ,"./_build/default/lib/pipe"
 ]}.
 {log_level,       info}.
 {report_interval, 1}.

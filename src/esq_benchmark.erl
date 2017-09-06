@@ -34,14 +34,15 @@ new(Id) ->
 
 %% 
 run(enq, _KeyGen, ValGen, Queue) ->
-   {ok, esq:enq(ValGen(), Queue)};
+   esq:enq(ValGen(), Queue),
+   {ok, Queue};
 
-run(deq, _KeyGen, _ValGen, Queue0) ->
-   case esq:deq(Queue0) of
-      {[], Queue1} ->
-         {error, not_found, Queue1};
-      {_ , Queue1} ->
-         {ok, Queue1}
+run(deq, _KeyGen, _ValGen, Queue) ->
+   case esq:deq(Queue) of
+      [] ->
+         {error, not_found, Queue};
+      _  ->
+         {ok, Queue}
    end.
 
 %%%----------------------------------------------------------------------------   
@@ -53,4 +54,5 @@ run(deq, _KeyGen, _ValGen, Queue0) ->
 init(Id) ->
    Config = basho_bench_config:get(queue, []),
    Path = filename:join(["/tmp/esq/", scalar:c(Id)]),
-   esq:new(Path, Config).
+   {ok, Queue} = esq:new(Path, Config),
+   Queue.

@@ -30,7 +30,7 @@ IID     = ${URI}${ORG}/${APP}
 ##  - rebar version (no spaces at end)
 ##  - path to basho benchmark 
 REBAR  ?= 3.3.2
-BB      = ../basho_bench
+BB      = ../../dev/basho_bench
 
 
 ## erlang runtime configration flags

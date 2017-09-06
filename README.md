@@ -81,9 +81,8 @@ deq <----+    C     <-----+ q |   | q |  ...  | q <-------+ enq
 
 |-----( in-memory )-----|---------( on-disk )---------| 
 ```
-Any point of time a segment is either open for write or read. Segments are rotated with a frequency defined by time-to-sync (`tts`) timer. Note this timer might cause and invisibility of overflow message if dequeue rate is higher then enqueue.  
+Any point of time a segment is either open for write or read. Segments are rotated with a frequency defined by time-to-sync (`tts`) timer. Note this timer might cause and invisibility of overflow message if dequeue rate is higher then enqueue. The queue always writes message to last disk segment.  
 
-Queue starts to "swap" to file segments only when enqueue rate causes an overflow of in-memory buffer. 
 
 
 ### In-flight capabilities
