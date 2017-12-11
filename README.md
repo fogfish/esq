@@ -18,9 +18,9 @@ The latest version of the library is available at its master branch. All develop
 If you use rebar3 you can include the library in your project with
 
 ```erlang
-{esq, ".*",
-   {git, "https://github.com/fogfish/esq", {branch, master}}
-}
+{deps, [
+   esq
+]}.
 ```
 
 ### Usage

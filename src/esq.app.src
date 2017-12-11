@@ -1,7 +1,7 @@
 {application, esq,
    [
       {description, "erlang simple queue"},
-      {vsn,         "2.0.0"},
+      {vsn,         "2.0.1"},
       {modules,     []},
       {registered,  []},
       {applications,[
@@ -13,6 +13,12 @@
       ]},
       {mod, {esq_app, []}},
       {env, []}
+
+      {licenses, ["Apache"]},
+      {maintainers, ["Dmitry Kolesnikov"]},
+      {links, [
+         {"GitHub", "https://github.com/fogfish/esq"}
+      ]}
    ]
 }.  
 
