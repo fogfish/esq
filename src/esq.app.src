@@ -12,7 +12,7 @@
         ,pipe
       ]},
       {mod, {esq_app, []}},
-      {env, []}
+      {env, []},
 
       {licenses, ["Apache"]},
       {maintainers, ["Dmitry Kolesnikov"]},
