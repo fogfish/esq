@@ -2,7 +2,7 @@ language: erlang
 dist: trusty
 
 script: 
-   - make
+   - make compile
    - make test
    - ./rebar3 coveralls send
 
