@@ -9,4 +9,5 @@ script:
 otp_release:
    - 19.2
    - 20.0
+   - 20.1
 
