@@ -77,8 +77,7 @@ end_per_group(_, _Config) ->
 %%%----------------------------------------------------------------------------   
 
 new(_Config) ->
-   Heap = {h, 0, {}},
-   {inflight, 1000, Heap} = esq_inflight:new(1000).
+   {inflight, 1000, {heap, _, undefined}} = esq_inflight:new(1000).
 
 
 enq(_Config) ->

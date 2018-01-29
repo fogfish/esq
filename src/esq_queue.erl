@@ -3,6 +3,7 @@
 -compile({parse_transform, category}).
 
 -include("esq.hrl").
+-include_lib("datum/include/datum.hrl").
 
 -export([
    start_link/2,
@@ -147,7 +148,7 @@ head(State) ->
       head_(_)
    ].
 
-head_(#q{head = {}} = State) ->
+head_(#q{head = #queue{}} = State) ->
    {undefined, State};
 
 head_(#q{head = Head} = State) ->
@@ -188,7 +189,7 @@ sync_on_disk_tail(#q{tail = Tail, tte = Expire, tts = T}=State) ->
 
 %%
 %%
-shift_on_disk_tail(N, #q{head = {}, tail = Queue, capacity = C} = State) ->
+shift_on_disk_tail(N, #q{head = #queue{}, tail = Queue, capacity = C} = State) ->
    {H, T} = esq_file:deq(N + C, Queue),
    State#q{head = H, tail = T};
 
@@ -222,7 +223,7 @@ enq_in_flight(Queue, #q{inflight = undefined} = State) ->
 enq_in_flight(Queue, State) ->
    enq_in_flight(Queue, deq:new(), State).
 
-enq_in_flight({}, Acc, State) ->
+enq_in_flight(#queue{}, Acc, State) ->
    {deq:list(Acc), State};
 
 enq_in_flight(Queue, Acc, #q{inflight = InFlight0} = State) ->

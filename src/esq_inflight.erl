@@ -54,7 +54,7 @@ enq(E, #inflight{q = Queue0} = InFlight) ->
 %%
 %%
 deq(Uid, #inflight{ttf = TTF, q = Queue0} = InFlight) ->
-   {Head, Queue1} = heap:splitwith(fun(X) -> diff(Uid, X) > TTF end, Queue0),
+   {Head, Queue1} = heap:splitwhile(fun(X) -> diff(Uid, X) > TTF end, Queue0),
    {heap:list(Head), InFlight#inflight{q = Queue1}}.
 
 %%

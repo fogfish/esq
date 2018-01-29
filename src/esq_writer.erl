@@ -86,8 +86,8 @@ close(#writer{fd = undefined, root = Root} = State) ->
    State;
 
 close(#writer{fd = FD, file = File} = State) ->
-   ok = file:close(FD),
-   _  = rename(File),
+   _ = file:close(FD),
+   _ = rename(File),
    State#writer{fd = undefined, file = undefined, written = 0}.
 
 %%
