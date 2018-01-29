@@ -148,7 +148,7 @@ head(State) ->
       head_(_)
    ].
 
-head_(#q{head = #queue{}} = State) ->
+head_(#q{head = #queue{length = 0}} = State) ->
    {undefined, State};
 
 head_(#q{head = Head} = State) ->
@@ -168,7 +168,7 @@ pack({Uid, E}) ->
 inject(Elements, Queue) ->
    lists:foldr(
       fun(E, Acc) -> 
-         deq:poke(pack(E), Acc) 
+         deq:enqh(pack(E), Acc) 
       end, 
       Queue,
       Elements 
@@ -189,7 +189,7 @@ sync_on_disk_tail(#q{tail = Tail, tte = Expire, tts = T}=State) ->
 
 %%
 %%
-shift_on_disk_tail(N, #q{head = #queue{}, tail = Queue, capacity = C} = State) ->
+shift_on_disk_tail(N, #q{head = #queue{length = 0}, tail = Queue, capacity = C} = State) ->
    {H, T} = esq_file:deq(N + C, Queue),
    State#q{head = H, tail = T};
 
@@ -223,7 +223,7 @@ enq_in_flight(Queue, #q{inflight = undefined} = State) ->
 enq_in_flight(Queue, State) ->
    enq_in_flight(Queue, deq:new(), State).
 
-enq_in_flight(#queue{}, Acc, State) ->
+enq_in_flight(#queue{length = 0}, Acc, State) ->
    {deq:list(Acc), State};
 
 enq_in_flight(Queue, Acc, #q{inflight = InFlight0} = State) ->
