@@ -19,7 +19,9 @@ If you use rebar3 you can include the library in your project with
 
 ```erlang
 {deps, [
-   esq
+   {esq, ".*",
+      {git, "https://github.com/fogfish/esq", {branch, master}}
+   }
 ]}.
 ```
 
