@@ -1,16 +1,16 @@
 {"1.1.0",
-[{<<"datum">>,{pkg,<<"datum">>,<<"4.3.2">>},0},
+[{<<"datum">>,{pkg,<<"datum">>,<<"4.3.6">>},0},
  {<<"feta">>,
   {git,"https://github.com/fogfish/feta",
        {ref,"c5d251b3f995b96afd5e8ec7da61516842aa658c"}},
   0},
- {<<"pipe">>,{pkg,<<"pipes">>,<<"1.8.0">>},0},
+ {<<"pipe">>,{pkg,<<"pipes">>,<<"2.0.0">>},0},
  {<<"uid">>,
   {git,"https://github.com/fogfish/uid",
        {ref,"698ebcb27b273a2f879d8bd24be5f5ea54c98850"}},
   0}]}.
 [
 {pkg_hash,[
- {<<"datum">>, <<"841549936326B2D660D267D52B3DC7B16457CC174CBACF57E655D79F4BAB924E">>},
- {<<"pipe">>, <<"512C831A47605D43688C8CB9266A3DCAE88BA6A3845FA65E40EB9EC22E77F5C7">>}]}
+ {<<"datum">>, <<"07AA802EF8C68FC990164BB398890FBE03FF4FA30570C37BF6D836A4FDF27D54">>},
+ {<<"pipe">>, <<"A10DF54F1EC80EAA491EE7BD689C794886E6E668A9F05436514695E9CF5370AE">>}]}
 ].
