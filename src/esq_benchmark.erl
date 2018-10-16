@@ -53,6 +53,6 @@ run(deq, _KeyGen, _ValGen, Queue) ->
 
 init(Id) ->
    Config = basho_bench_config:get(queue, []),
-   Path = filename:join(["/tmp/esq/", scalar:c(Id)]),
+   Path = filename:join(["/tmp/esq/", typecast:c(Id)]),
    {ok, Queue} = esq:new(Path, Config),
    Queue.
