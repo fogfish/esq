@@ -69,7 +69,8 @@ length(_) ->
 %%
 %% open file
 open(#writer{fd = undefined, root = Root} = State) ->
-   Now  = tempus:encode("%Y%m%d", os:timestamp()),
+   {{Y, M, D}, {_, _ ,_}} = calendar:local_time(),
+   Now = lists:flatten(io_lib:format("~4.10.0B~2.10.0B~2.10.0B", [Y, M, D])),
    File = filename:join([Root, Now, "q" ++ ?WRITER]),
    ok   = filelib:ensure_dir(File),
    {ok, FD} = file:open(File, [raw, binary, append, exclusive, {delayed_write, ?CHUNK, ?DELAY}]),
@@ -96,8 +97,10 @@ rename(File) ->
    Path = filename:dirname(File),
    Name = filename:basename(File, ?WRITER),
    {A, B, C}  = os:timestamp(),
-   Ext = scalar:c(bits:btoh(<<A:32,B:32,C:32>>)),
+   Ext = typecast:c(typecast:x(<<A:32,B:32,C:32>>)),
    file:rename(File, filename:join([Path, [Name, $., Ext]])).
+
+
 
 %%
 %%

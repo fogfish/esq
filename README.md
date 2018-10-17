@@ -2,7 +2,10 @@
 
 The library implements persistent queue data structure for Erlang applications.
 
-[![Build Status](https://secure.travis-ci.org/fogfish/esq.svg?branch=master)](http://travis-ci.org/fogfish/esq) [![Coverage Status](https://coveralls.io/repos/github/fogfish/esq/badge.svg?branch=master)](https://coveralls.io/github/fogfish/esq?branch=master)
+[![Build Status](https://secure.travis-ci.org/fogfish/esq.svg?branch=master)](http://travis-ci.org/fogfish/esq)
+[![Coverage Status](https://coveralls.io/repos/github/fogfish/esq/badge.svg?branch=master)](https://coveralls.io/github/fogfish/esq?branch=master)
+[![Hex.pm](https://img.shields.io/hexpm/v/esq.svg)](https://hex.pm/packages/esq) 
+[![Hex Downloads](https://img.shields.io/hexpm/dt/esq.svg)](https://hex.pm/packages/esq)
 
 ## Inspiration
 
@@ -15,14 +18,10 @@ The latest version of the library is available at its master branch. All develop
 
 ### Installation
 
-If you use rebar3 you can include the library in your project with
+The stable library release is available via hex packages, add the library as dependency to `rebar.config`
 
 ```erlang
-{deps, [
-   {esq, ".*",
-      {git, "https://github.com/fogfish/esq", {branch, master}}
-   }
-]}.
+{deps, [esq]}.
 ```
 
 ### Usage

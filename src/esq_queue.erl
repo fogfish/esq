@@ -38,7 +38,12 @@ config([{ttf, X} | Opts], State) ->
    config(Opts, State#q{inflight = esq_inflight:new(X)});
 
 config([{tts, X} | Opts], State) ->
-   config(Opts, State#q{tts = X, tte = tempus:add(os:timestamp(), tempus:t(m, X))});
+   config(Opts, 
+      State#q{
+         tts = X, 
+         tte = typecast:t( typecast:i(os:timestamp()) + X * 1000 )
+      }
+   );
 
 config([{capacity, X} | Opts], State) ->
    config(Opts, State#q{capacity = X});
@@ -181,7 +186,7 @@ sync_on_disk_tail(#q{tail = Tail, tte = Expire, tts = T}=State) ->
       X when X > Expire ->
          State#q{
             tail = esq_file:sync(Tail),
-            tte  = tempus:add(os:timestamp(), tempus:t(m, T))
+            tte  = typecast:t( typecast:i(X) + T * 1000 )
          };
       _ ->
          State
