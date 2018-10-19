@@ -43,7 +43,7 @@
 -spec start() -> ok.
 
 start() ->
-   applib:boot(?MODULE, []).
+   application:ensure_all_started(esq).
 
 %%
 %% create new queue 
