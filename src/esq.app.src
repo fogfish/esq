@@ -1,13 +1,12 @@
 {application, esq,
    [
       {description, "erlang simple queue"},
-      {vsn,         "2.0.3"},
+      {vsn,         "2.0.4"},
       {modules,     []},
       {registered,  []},
       {applications,[
          kernel,
          stdlib,
-         feta,
          datum,
          pipe,
          uid
