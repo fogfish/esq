@@ -122,7 +122,7 @@ read(#reader{fd = FD, chunk = Head} = State) ->
 
 %%
 %% decode message from memory buffer
-decode(<<0:16, Len:16, Hash:32, Tail/binary>>) ->
+decode(<<0:16, Len:32, Hash:32, Tail/binary>>) ->
    case byte_size(Tail) of
       X when X < Len ->
          noent;
