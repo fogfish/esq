@@ -122,4 +122,4 @@ encode(Msg) ->
 pack(Msg)
  when is_binary(Msg) ->
    Hash   = ?HASH32(Msg),
-   <<0:16, (byte_size(Msg)):16, Hash:32, Msg/binary>>.
+   <<0:16, (byte_size(Msg)):32, Hash:32, Msg/binary>>.
