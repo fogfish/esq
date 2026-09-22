@@ -26,6 +26,8 @@
   ,end_per_suite/1
   ,init_per_group/2
   ,end_per_group/2
+  ,init_per_testcase/2
+  ,end_per_testcase/2
 ]).
 
 -export([
@@ -77,6 +79,24 @@ init_per_group(_, Config) ->
 end_per_group(_, _Config) ->
    ok.
 
+%%
+%% capture esq log events, the handler is removed even if test case fails
+init_per_testcase(corrupted, Config) ->
+   ok = logger:add_handler(esq_SUITE, ?MODULE, #{
+      config  => #{pid => self()},
+      filters => [{esq, {fun logger_filters:domain/2, {log, sub, [esq]}}}],
+      filter_default => stop
+   }),
+   Config;
+init_per_testcase(_, Config) ->
+   Config.
+
+end_per_testcase(corrupted, _Config) ->
+   _ = logger:remove_handler(esq_SUITE),
+   ok;
+end_per_testcase(_, _Config) ->
+   ok.
+
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -123,11 +143,6 @@ inflight(_Config) ->
 
 
 corrupted(_Config) ->
-   ok = logger:add_handler(esq_SUITE, ?MODULE, #{
-      config  => #{pid => self()},
-      filters => [{esq, {fun logger_filters:domain/2, {log, sub, [esq]}}}],
-      filter_default => stop
-   }),
    Root = "/tmp/q/corrupted",
    File = filename:join([Root, "20170101", "q.0000000000000000"]),
    ok = filelib:ensure_dir(File),
@@ -151,7 +166,6 @@ corrupted(_Config) ->
    {b,    R4} = esq_reader:deq(R3),
    {eof,  _ } = esq_reader:deq(R4),
 
-   ok = logger:remove_handler(esq_SUITE),
    [First, Summary] = logged(),
    {match, _} = re:run(First, File),
    {match, _} = re:run(Summary, "skipped 4 .* " ++ File).
