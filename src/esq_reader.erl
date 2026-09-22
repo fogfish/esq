@@ -16,6 +16,7 @@
 %%
 -module(esq_reader).
 -include("esq.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
    new/1
@@ -31,6 +32,7 @@
   ,root   = undefined :: string()        %% root path to queue segment
   ,file   = undefined :: string()        %% path to active segment
   ,chunk  = <<>>      :: binary()
+  ,skipped = 0        :: integer()       %% number of skipped frames in active segment
 }).
 
 %%
@@ -59,10 +61,10 @@ deq(#reader{chunk = Chunk0} = State0) ->
       noent ->
          deq( read(State0) );
 
-      {<<>>, Chunk1} ->
-         deq(State0#reader{chunk = Chunk1});
+      {skip, Chunk1} ->
+         deq(skipped(State0#reader{chunk = Chunk1}));
 
-      {Msg,  Chunk1} ->
+      {msg, Msg, Chunk1} ->
          {Msg, State0#reader{chunk = Chunk1}}
    end.   
 
@@ -104,11 +106,26 @@ open(State) ->
 close(#reader{fd = undefined} = State) ->
    State;
 
-close(#reader{fd = FD, file = File} = State) ->
+close(#reader{fd = FD, file = File, skipped = Skipped} = State) ->
+   Skipped > 1 andalso
+      ?LOG_ERROR("esq: skipped ~b corrupted or undecodable frames in segment ~s",
+         [Skipped, File], #{domain => [esq]}),
    ok = file:close(FD),
    ok = file:delete(File),
    file:del_dir(filename:dirname(File)), 
-   State#reader{fd = undefined, file = undefined, chunk = <<>>}.
+   State#reader{fd = undefined, file = undefined, chunk = <<>>, skipped = 0}.
+
+%%
+%% count skipped frame, log the first one in segment immediately,
+%% the total is logged once segment is closed
+skipped(#reader{file = File, skipped = 0} = State) ->
+   ?LOG_ERROR("esq: skipped corrupted or undecodable frame in segment ~s, "
+      "further frames will be counted and reported when segment is closed",
+      [File], #{domain => [esq]}),
+   State#reader{skipped = 1};
+
+skipped(#reader{skipped = Skipped} = State) ->
+   State#reader{skipped = Skipped + 1}.
 
 %%
 %% read chunk of data
@@ -129,8 +146,8 @@ decode(<<0:16, Len:32, Hash:32, Tail/binary>>) ->
       _ ->
          <<Msg:Len/binary, Rest/binary>> = Tail,
          case ?HASH32(Msg) of
-            Hash -> {erlang:binary_to_term(Msg),  Rest};
-            _    -> {<<>>, Rest}
+            Hash -> binary_to_term_or_skip(Msg, Rest);
+            _    -> {skip, Rest}
          end
    end;
 
@@ -140,5 +157,15 @@ decode(X)
 
 decode(<<_:8, Tail/binary>>) ->
    decode(Tail).
+
+%%
+%% skip message that cannot be decoded (e.g. encoded by incompatible OTP release)
+%% instead of crashing on it again and again after each restart
+binary_to_term_or_skip(Msg, Rest) ->
+   try
+      {msg, erlang:binary_to_term(Msg), Rest}
+   catch error:badarg ->
+      {skip, Rest}
+   end.
 
 

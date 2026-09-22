@@ -32,8 +32,13 @@
    enq/1, 
    deq/1,
    persistence/1,
-   inflight/1
+   inflight/1,
+   corrupted/1
 ]).
+
+%%
+%% logger handler
+-export([log/2]).
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -48,7 +53,7 @@ all() ->
 groups() ->
    [
       {interface, [parallel], 
-         [enq, deq, persistence, inflight]}
+         [enq, deq, persistence, inflight, corrupted]}
    ].
 
 
@@ -116,3 +121,50 @@ inflight(_Config) ->
    ok = esq:free(Q).
 
 
+
+corrupted(_Config) ->
+   ok = logger:add_handler(esq_SUITE, ?MODULE, #{
+      config  => #{pid => self()},
+      filters => [{esq, {fun logger_filters:domain/2, {log, sub, [esq]}}}],
+      filter_default => stop
+   }),
+   Root = "/tmp/q/corrupted",
+   File = filename:join([Root, "20170101", "q.0000000000000000"]),
+   ok = filelib:ensure_dir(File),
+   Undecodable = <<131, 255, 1, 2, 3>>,
+   BadHash = term_to_binary(bad_hash),
+   ok = file:write_file(File, [
+      frame(term_to_binary(a)),
+      frame(Undecodable),
+      frame(term_to_binary(<<>>)),
+      frame(Undecodable),
+      frame(Undecodable),
+      <<0:16, (byte_size(BadHash)):32, (erlang:crc32(BadHash) + 1):32, BadHash/binary>>,
+      frame(term_to_binary(skip)),
+      frame(term_to_binary(b))
+   ]),
+
+   R0 = esq_reader:new(Root),
+   {a,    R1} = esq_reader:deq(R0),
+   {<<>>, R2} = esq_reader:deq(R1),
+   {skip, R3} = esq_reader:deq(R2),
+   {b,    R4} = esq_reader:deq(R3),
+   {eof,  _ } = esq_reader:deq(R4),
+
+   ok = logger:remove_handler(esq_SUITE),
+   [First, Summary] = logged(),
+   {match, _} = re:run(First, File),
+   {match, _} = re:run(Summary, "skipped 4 .* " ++ File).
+
+frame(Msg) ->
+   <<0:16, (byte_size(Msg)):32, (erlang:crc32(Msg)):32, Msg/binary>>.
+
+logged() ->
+   receive
+      {log, Msg} -> [Msg | logged()]
+   after 0 ->
+      []
+   end.
+
+log(#{msg := {Format, Args}}, #{config := #{pid := Pid}}) ->
+   Pid ! {log, lists:flatten(io_lib:format(Format, Args))}.
