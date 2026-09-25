@@ -109,7 +109,7 @@ close(#reader{fd = undefined} = State) ->
 close(#reader{fd = FD, file = File, skipped = Skipped} = State) ->
    Skipped > 1 andalso
       ?LOG_ERROR("esq: skipped ~b corrupted or undecodable frames in segment ~s",
-         [Skipped, File], #{domain => [esq]}),
+         [Skipped, File]),
    ok = file:close(FD),
    ok = file:delete(File),
    file:del_dir(filename:dirname(File)), 
@@ -121,7 +121,7 @@ close(#reader{fd = FD, file = File, skipped = Skipped} = State) ->
 skipped(#reader{file = File, skipped = 0} = State) ->
    ?LOG_ERROR("esq: skipped corrupted or undecodable frame in segment ~s, "
       "further frames will be counted and reported when segment is closed",
-      [File], #{domain => [esq]}),
+      [File]),
    State#reader{skipped = 1};
 
 skipped(#reader{skipped = Skipped} = State) ->

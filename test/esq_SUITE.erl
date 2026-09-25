@@ -40,7 +40,7 @@
 
 %%
 %% logger handler
--export([log/2]).
+-export([log/2, filter/2]).
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -84,7 +84,7 @@ end_per_group(_, _Config) ->
 init_per_testcase(corrupted, Config) ->
    ok = logger:add_handler(esq_SUITE, ?MODULE, #{
       config  => #{pid => self()},
-      filters => [{esq, {fun logger_filters:domain/2, {log, sub, [esq]}}}],
+      filters => [{esq, {fun ?MODULE:filter/2, esq_reader}}],
       filter_default => stop
    }),
    Config;
@@ -182,3 +182,8 @@ logged() ->
 
 log(#{msg := {Format, Args}}, #{config := #{pid := Pid}}) ->
    Pid ! {log, lists:flatten(io_lib:format(Format, Args))}.
+
+filter(#{meta := #{mfa := {Mod, _, _}}} = Event, Mod) ->
+   Event;
+filter(_, _) ->
+   stop.
