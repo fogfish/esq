@@ -25,7 +25,7 @@ init([Path, Opts]) ->
    {ok, handle, 
       config(Opts, #q{
          head     = deq:new(),
-         tail     = esq_file:new(Path),
+         tail     = esq_file:new(Path, Opts),
          capacity = 1,
          tts      = 1000
       })

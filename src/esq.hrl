@@ -27,6 +27,10 @@
 -define(DELAY,           2000).
 
 %%
+%% max size of dead letter queue 64MB
+-define(DLQ,         67108864).
+
+%%
 %% message hash function
 -define(HASH32(X),  erlang:crc32(X)).
 

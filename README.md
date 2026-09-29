@@ -138,6 +138,12 @@ timer:sleep(6000).
 * `ttf` message time-to-flight in milliseconds, the time required to deliver message acknowledgment before it reappears to client(s) again. If parameter is not defined then in-flight heap is not used and message acknowledgment is not required.
 * `tts` queue time-to-sync (rotate) file segments in milliseconds. Any enqueue message might remain invisible until sync is performed. 
 
+### Dead letter queue
+
+A message that cannot be read from a segment (the frame is corrupted or the payload cannot be decoded, e.g. it was written by an incompatible OTP release) is skipped. Instead of being lost when the segment is removed, the raw frame is moved to a dead letter file `dlq.<id>` next to the segment `q.<id>`. The queue never reads dead letter files, it is up to operator to recover and remove them.
+
+* `dlq` max size of all dead letter files in bytes, 64MB by default. Once the limit is reached, further skipped messages are dropped; existing dead letter files are never removed by the queue. `0` disables the dead letter queue.
+
 ### Performance
 
 The queue performance is evaluated using [basho benchmark](https://github.com/basho/basho_bench) with [25% dequeue and 75% enqueue workload](priv/esq.benchmark) on MacBook Pro, Intel Core i7, 2.8GHz, 16GB 2133 MHz LPDDR3, 256 SSD
