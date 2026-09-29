@@ -20,6 +20,7 @@
 
 -export([
    new/1
+  ,new/2
   ,free/1
   ,deq/1
   ,length/1
@@ -33,12 +34,23 @@
   ,file   = undefined :: string()        %% path to active segment
   ,chunk  = <<>>      :: binary()
   ,skipped = 0        :: integer()       %% number of skipped frames in active segment
+  ,quarantined = 0    :: integer()       %% number of skipped frames moved to dead letter queue
+  ,dlq      = ?DLQ    :: integer()       %% max size of dead letter queue in bytes
+  ,dlq_used = 0       :: integer()       %% size of dead letter queue in bytes
+  ,dlq_fd   = undefined :: any()         %% file descriptor to dead letter file of active segment
 }).
 
 %%
 %%
 new(Root) ->
-   #reader{root = Root}.
+   new(Root, []).
+
+new(Root, Opts) ->
+   #reader{
+      root     = Root
+     ,dlq      = proplists:get_value(dlq, Opts, ?DLQ)
+     ,dlq_used = dlq_used(Root)
+   }.
 
 %%
 %%
@@ -61,8 +73,8 @@ deq(#reader{chunk = Chunk0} = State0) ->
       noent ->
          deq( read(State0) );
 
-      {skip, Chunk1} ->
-         deq(skipped(State0#reader{chunk = Chunk1}));
+      {skip, Frame, Chunk1} ->
+         deq(skipped(Frame, State0#reader{chunk = Chunk1}));
 
       {msg, Msg, Chunk1} ->
          {Msg, State0#reader{chunk = Chunk1}}
@@ -106,26 +118,92 @@ open(State) ->
 close(#reader{fd = undefined} = State) ->
    State;
 
-close(#reader{fd = FD, file = File, skipped = Skipped} = State) ->
-   Skipped > 1 andalso
-      ?LOG_ERROR("esq: skipped ~b corrupted or undecodable frames in segment ~s",
-         [Skipped, File]),
+close(#reader{fd = FD, file = File} = State) ->
+   close_dlq(State),
    ok = file:close(FD),
    ok = file:delete(File),
    file:del_dir(filename:dirname(File)), 
-   State#reader{fd = undefined, file = undefined, chunk = <<>>, skipped = 0}.
+   State#reader{fd = undefined, file = undefined, chunk = <<>>,
+      skipped = 0, quarantined = 0, dlq_fd = undefined}.
+
+%%
+%% close dead letter file of active segment, report skipped frames
+close_dlq(#reader{skipped = 0}) ->
+   ok;
+
+close_dlq(State) ->
+   close_dlq_file(State),
+   log_skipped(State).
+
+close_dlq_file(#reader{dlq_fd = undefined}) ->
+   ok;
+
+close_dlq_file(#reader{dlq_fd = FD, file = File, quarantined = 0}) ->
+   %% nothing fits into dead letter queue, remove empty file
+   ok = file:close(FD),
+   ok = file:delete(dlq_file(File));
+
+close_dlq_file(#reader{dlq_fd = FD}) ->
+   ok = file:close(FD).
+
+log_skipped(#reader{file = File, skipped = Skipped, quarantined = 0}) ->
+   ?LOG_ERROR("esq: skipped ~b corrupted or undecodable frames in segment ~s, "
+      "all dropped (dead letter queue is disabled or full)",
+      [Skipped, File]);
+
+log_skipped(#reader{file = File, skipped = Skipped, quarantined = Skipped}) ->
+   ?LOG_ERROR("esq: skipped ~b corrupted or undecodable frames in segment ~s, "
+      "all moved to dead letter file ~s",
+      [Skipped, File, dlq_file(File)]);
+
+log_skipped(#reader{file = File, skipped = Skipped, quarantined = Quarantined}) ->
+   ?LOG_ERROR("esq: skipped ~b corrupted or undecodable frames in segment ~s, "
+      "~b moved to dead letter file ~s, ~b dropped (dead letter queue is full)",
+      [Skipped, File, Quarantined, dlq_file(File), Skipped - Quarantined]).
 
 %%
 %% count skipped frame, log the first one in segment immediately,
 %% the total is logged once segment is closed
-skipped(#reader{file = File, skipped = 0} = State) ->
+skipped(Frame, #reader{file = File, skipped = 0} = State) ->
    ?LOG_ERROR("esq: skipped corrupted or undecodable frame in segment ~s, "
       "further frames will be counted and reported when segment is closed",
       [File]),
-   State#reader{skipped = 1};
+   quarantine(Frame, State#reader{skipped = 1});
 
-skipped(#reader{skipped = Skipped} = State) ->
-   State#reader{skipped = Skipped + 1}.
+skipped(Frame, #reader{skipped = Skipped} = State) ->
+   quarantine(Frame, State#reader{skipped = Skipped + 1}).
+
+%%
+%% write skipped frame to dead letter file of active segment if it fits into dead letter queue
+quarantine(_Frame, #reader{dlq = 0} = State) ->
+   State;
+
+quarantine(Frame, #reader{dlq_fd = undefined, file = File, dlq_used = Used} = State) ->
+   %% segment is read again from the beginning after restart,
+   %% dead letter file written by previous reader is re-written
+   Dead = dlq_file(File),
+   Size = filelib:file_size(Dead),
+   {ok, FD} = file:open(Dead, [raw, binary, write]),
+   quarantine(Frame, State#reader{dlq_fd = FD, dlq_used = Used - Size});
+
+quarantine(Frame, #reader{dlq = Limit, dlq_used = Used} = State)
+ when Used + byte_size(Frame) > Limit ->
+   State;
+
+quarantine(Frame, #reader{dlq_fd = FD, dlq_used = Used, quarantined = Quarantined} = State) ->
+   ok = file:write(FD, Frame),
+   State#reader{dlq_used = Used + byte_size(Frame), quarantined = Quarantined + 1}.
+
+%%
+%% dead letter file of segment, it does not match segment pattern
+dlq_file(File) ->
+   filename:join(filename:dirname(File), "dl" ++ filename:basename(File)).
+
+%%
+%% size of all dead letter files in bytes
+dlq_used(Root) ->
+   File = filename:join([Root, "*", ["dlq", ?READER]]),
+   lists:sum([filelib:file_size(X) || X <- filelib:wildcard(File)]).
 
 %%
 %% read chunk of data
@@ -139,15 +217,23 @@ read(#reader{fd = FD, chunk = Head} = State) ->
 
 %%
 %% decode message from memory buffer
-decode(<<0:16, Len:32, Hash:32, Tail/binary>>) ->
+decode(<<0:16, Len:32, Hash:32, Tail/binary>> = Chunk) ->
    case byte_size(Tail) of
       X when X < Len ->
          noent;
       _ ->
          <<Msg:Len/binary, Rest/binary>> = Tail,
          case ?HASH32(Msg) of
-            Hash -> binary_to_term_or_skip(Msg, Rest);
-            _    -> {skip, Rest}
+            Hash ->
+               %% skip message that cannot be decoded (e.g. encoded by incompatible OTP release)
+               %% instead of crashing on it again and again after each restart
+               try
+                  {msg, erlang:binary_to_term(Msg), Rest}
+               catch error:badarg ->
+                  {skip, frame(Chunk, Rest), Rest}
+               end;
+            _ ->
+               {skip, frame(Chunk, Rest), Rest}
          end
    end;
 
@@ -159,13 +245,8 @@ decode(<<_:8, Tail/binary>>) ->
    decode(Tail).
 
 %%
-%% skip message that cannot be decoded (e.g. encoded by incompatible OTP release)
-%% instead of crashing on it again and again after each restart
-binary_to_term_or_skip(Msg, Rest) ->
-   try
-      {msg, erlang:binary_to_term(Msg), Rest}
-   catch error:badarg ->
-      {skip, Rest}
-   end.
+%% raw frame (header and message) at the beginning of chunk, it is needed only for skipped frame
+frame(Chunk, Rest) ->
+   binary:part(Chunk, 0, byte_size(Chunk) - byte_size(Rest)).
 
 

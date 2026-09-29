@@ -18,6 +18,7 @@
 
 -export([
    new/1
+  ,new/2
   ,free/1
   ,length/1
   ,enq/2
@@ -36,9 +37,12 @@
 %%
 %%
 new(Root) ->
+   new(Root, []).
+
+new(Root, Opts) ->
    #file{
       writer = esq_writer:new(Root)
-     ,reader = esq_reader:new(Root)
+     ,reader = esq_reader:new(Root, Opts)
      ,length = esq_reader:length(Root)
    }.
 
