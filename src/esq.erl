@@ -57,6 +57,9 @@ start() ->
 %%                         time to update overflow queue, any overflow message remain invisible
 %%                         for read until spool segment is synced.
 %%    {capacity, integer()} - size of the head
+%%    {dlq,   integer()} - max size of dead letter queue in bytes (default 64MB),
+%%                         corrupted or undecodable messages are moved to dead letter
+%%                         files next to segments, 0 disables it
 -spec new(list()) -> {ok, queue()}.
 
 new(Path) ->
